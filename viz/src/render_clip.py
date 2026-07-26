@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_scene as bs  # noqa: E402  — the V1.0 scene, reused wholesale
 
 ROOT = Path(__file__).resolve().parents[2]
-TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
+DEFAULT_TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
 CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
 
 
@@ -140,7 +140,8 @@ def _animate(empties, track, n):
 
 
 
-def _tracking_camera(track, n, lens: float, lag: float, side: float, height: float):
+def _tracking_camera(track, n, lens: float, lag: float, side: float, height: float,
+                     release_frame: int = 0, back: float = 0.0):
     """A camera that travels with the board instead of watching it leave.
 
     The board covers 3.6 m. A locked-off camera would lose it in a second, and
@@ -168,10 +169,29 @@ def _tracking_camera(track, n, lens: float, lag: float, side: float, height: flo
     bpy.context.scene.camera = cam
 
     x0 = float(pos[0][0])
+    # After release_frame the rig stops following and simply holds. For the
+    # closed-loop run that beat IS the story: a camera locked to the subject
+    # cancels the very thing the clip has to show, because the board balancing
+    # while riding away looks identical to a board standing still. Letting it
+    # leave frame is what makes "it holds attitude, then rides away" legible —
+    # and the drift is the honest half of that sentence.
+    # `back` parks the camera behind the start; with lag=0 it never moves, so
+    # the board recedes into the garage instead of sliding sideways out of
+    # frame. Freezing a side-tracking camera does not work here — the board is
+    # still accelerating when the clip ends, so it clears a 1.2 m frame in well
+    # under a second no matter how late the release. Shoot a departure from
+    # behind and it simply gets smaller, which reads as "rides away" and never
+    # runs out of frame to leave.
+    hold = None
     for i in range(n):
         bx, by, bz = (float(v) for v in pos[i])
-        tgt.location = (bx, by, bz)
-        cam.location = (x0 + (bx - x0) * lag, by + side, bz + height)
+        if release_frame and i >= release_frame:
+            if hold is None:
+                hold = (tgt.location.copy(), cam.location.copy())
+            tgt.location, cam.location = hold[0], hold[1]
+        else:
+            tgt.location = (bx, by, bz)
+            cam.location = (x0 + back + (bx - x0) * lag, by + side, bz + height)
         tgt.keyframe_insert("location", frame=i + 1)
         cam.keyframe_insert("location", frame=i + 1)
 
@@ -195,11 +215,16 @@ def main() -> int:
     ap.add_argument("--kicker", type=float, default=30.0)
     ap.add_argument("--floor-tint", type=float, default=0.16)
     ap.add_argument("--out", type=Path, default=ROOT / "out/impulse_clip.mp4")
+    ap.add_argument("--track", type=Path, default=DEFAULT_TRACK)
+    ap.add_argument("--cam-back", type=float, default=0.0,
+                    help="park the camera this far behind the start (use with --lag 0)")
+    ap.add_argument("--release-at", type=float, default=0.0,
+                    help="seconds after which the camera stops following and holds")
     ap.add_argument("--frame", type=int, default=0,
                     help="render this single frame only, for iteration")
     args = ap.parse_args(argv)
 
-    npz = np.load(TRACK, allow_pickle=False)
+    npz = np.load(args.track, allow_pickle=False)
     manifest = json.loads(str(npz["manifest"]))
     track = {"bodies": manifest["bodies"]}
     for b in manifest["bodies"]:
@@ -219,7 +244,9 @@ def main() -> int:
     _floor(tint=args.floor_tint)
     empties = _rig(track, manifest["bindings"])
     _animate(empties, track, n)
-    _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset)
+    _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset,
+                     release_frame=int(args.release_at * fps) if args.release_at else 0,
+                     back=args.cam_back)
     bs._kicker(args.kicker)
 
     scene = bpy.context.scene

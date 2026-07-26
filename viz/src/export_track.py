@@ -33,6 +33,7 @@ sys.path.insert(0, str(OVERBOARD))
 
 import mujoco  # noqa: E402
 from sim.scenarios.impulse_response import ImpulseParams, load_model, run  # noqa: E402
+from sim.scenarios.rust_controller import RustController  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -105,17 +106,32 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--seconds", type=float, default=6.0)
-    ap.add_argument("--out", type=Path, default=ROOT / "viz/scenes/impulse.otrk.npz")
+    ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--closed-loop", action="store_true",
+                    help="attach the real Rust PitchRegulator over the C ABI")
     args = ap.parse_args()
 
     model = load_model()
     params = ImpulseParams()
-    print(f"impulse scenario: {params.magnitude_ns} N·s at t={params.t0_s}s, "
+    kind = "closed_loop" if args.closed_loop else "impulse_response"
+    out = args.out or ROOT / f"viz/scenes/{kind}.otrk.npz"
+
+    print(f"{kind}: {params.magnitude_ns} N·s at t={params.t0_s}s, "
           f"{params.sim_seconds}s sim …")
-    result = run(params, model=model, capture_state=True)
+
+    if args.closed_loop:
+        # The same disturbance as the open-loop clip, deliberately: the two
+        # films are only comparable if the shove is identical. The controller
+        # is the ONLY difference between them.
+        with RustController() as controller:
+            result = run(params, model=model, controller=controller,
+                         capture_state=True)
+    else:
+        result = run(params, model=model, capture_state=True)
 
     m = result.metrics
-    for f in ("toppled", "peak_pitch_deg", "t_strike_s", "settle_time_s"):
+    for f in ("nose_strike", "toppled", "peak_abs_pitch_deg", "peak_pitch_deg",
+              "t_strike_s", "settle_time_s", "travel_m"):
         if hasattr(m, f):
             print(f"  {f} = {getattr(m, f)}")
 
@@ -167,7 +183,7 @@ def main() -> int:
         "schema_version": "1.0",
         "source": {
             "kind": "sim",
-            "scenario": "impulse_response",
+            "scenario": kind,
             "model_file": "sim/models/overboard_onewheel.xml",
             "model_sha256": hashlib.sha256(
                 (OVERBOARD / "sim/models/overboard_onewheel.xml").read_bytes()).hexdigest(),
@@ -192,14 +208,14 @@ def main() -> int:
         arrays[f"quat/{b}"] = quat[b]
     arrays.update({f"ch/{k}": v for k, v in channels.items()})
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(args.out, **arrays)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, **arrays)
 
     travel = float(pos["frame"][-1][0] - pos["frame"][0][0])
     drop = float(pos["frame"][:, 2].min() - pos["frame"][0][2])
-    print(f"\nwrote {args.out.name}: {n} frames @ {args.fps}fps ({t[-1]:.2f}s)")
+    print(f"\nwrote {out.name}: {n} frames @ {args.fps}fps ({t[-1]:.2f}s)")
     print(f"  frame travels {travel:+.2f} m in X, drops {drop:+.3f} m")
-    print(f"  size {args.out.stat().st_size / 1024:.0f} KiB")
+    print(f"  size {out.stat().st_size / 1024:.0f} KiB")
     return 0
 
 
