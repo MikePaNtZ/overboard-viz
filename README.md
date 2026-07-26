@@ -74,3 +74,11 @@ add-on is not loaded under factory startup, so final renders drop the flag.
 `MANIFEST.json` records every external asset's source, licence and sha256. Everything is CC0
 (Poly Haven) except the board meshes themselves, which are **MIT (Openwheel)** and require the
 copyright notice to be retained in published material.
+
+## Licence
+
+**MIT** — see [LICENSE](LICENSE), which also carries the third-party attribution (Openwheel MIT,
+Poly Haven CC0) and states plainly what these renders are.
+
+Every frame here is a **simulation** replaying motion MuJoCo computed in the `overboard` repo.
+None is a photograph, and none depicts hardware that has been built or ridden.
