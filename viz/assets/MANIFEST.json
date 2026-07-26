@@ -14,6 +14,18 @@
       }
     },
     {
+      "slug": "the_sky_is_on_fire",
+      "kind": "hdri",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/the_sky_is_on_fire",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Waterfront promenade at twilight \u2014 paved path, sea, railing, low warm sun. Dusk is the point: grading midday daylight down to sit on a dark page made it murky, whereas genuinely low light is dark for a reason. Rotated so the camera faces the water; there are apartment blocks on the far side and they stay out of frame, per the no-identifiable-place rule.",
+      "files": {
+        "the_sky_is_on_fire_4k.hdr": "b2f8feb373c894ff8f3c40a0edbf0356ef63bea9ee35d68a7684e34a6960f990"
+      }
+    },
+    {
       "slug": "approaching_storm",
       "kind": "hdri",
       "source": "Poly Haven",

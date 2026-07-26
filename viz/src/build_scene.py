@@ -133,7 +133,12 @@ def _textured(name: str, folder: Path, uv_scale: float, tint: float = 1.0):
 
     coord = nt.nodes.new("ShaderNodeTexCoord")
     mapping = nt.nodes.new("ShaderNodeMapping")
-    mapping.inputs["Scale"].default_value = (uv_scale, uv_scale, uv_scale)
+    # Accept a per-axis scale. A plane's UVs stay 0..1 across the mesh no matter
+    # how far it is stretched, so a single number on a long thin strip repeats
+    # the texture every few metres along its length and every few centimetres
+    # across it — which reads as a smeared, featureless surface.
+    sc = uv_scale if isinstance(uv_scale, (tuple, list)) else (uv_scale,) * 3
+    mapping.inputs["Scale"].default_value = (sc[0], sc[1], sc[2] if len(sc) > 2 else 1.0)
     nt.links.new(coord.outputs["UV"], mapping.inputs["Vector"])
 
     def tex(fname: str, non_color: bool):
@@ -328,7 +333,7 @@ def _camera(lens: float, az_deg: float, el_deg: float, dist: float,
     return cam
 
 
-def _kicker(energy: float):
+def _kicker(energy: float, warm: bool = False, loc=(1.5, 1.7, 1.5), size: float = 1.6):
     """A soft rim light from behind, opposite the HDRI's key.
 
     The board is navy, black and near-black sitting in a warm mid-tone garage;
@@ -337,11 +342,15 @@ def _kicker(energy: float):
     permits, since nothing is tuned from a render.
     """
     light = bpy.data.lights.new("kicker", "AREA")
-    light.energy, light.size = energy, 1.6
-    light.color = (0.85, 0.90, 1.0)  # cool, to separate from the warm HDRI
+    light.energy, light.size = energy, size
+    # Cool by default, to separate the board from a warm garage. At dusk the
+    # sign flips: the key IS warm and low, so a cool rim reads as a mistake —
+    # the figure needs a warm edge from the sun side or it goes to silhouette
+    # and the character, which is the whole point of showing a rider, is lost.
+    light.color = (1.0, 0.72, 0.42) if warm else (0.85, 0.90, 1.0)
     obj = bpy.data.objects.new("kicker", light)
     bpy.context.collection.objects.link(obj)
-    obj.location = (1.5, 1.7, 1.5)
+    obj.location = loc
     c = obj.constraints.new("TRACK_TO")
     c.target = bpy.data.objects["focus_target"]
     c.track_axis, c.up_axis = "TRACK_NEGATIVE_Z", "UP_Y"

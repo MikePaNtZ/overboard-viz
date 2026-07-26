@@ -51,7 +51,36 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
 CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
 OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
+WATERFRONT_HDRI = ROOT / "viz/assets/hdri/the_sky_is_on_fire_4k.hdr"
 GRASS = ROOT / "viz/assets/textures/aerial_grass_rock"
+
+
+def _promenade(length: float = 400.0, width: float = 13.0, tint: float = 0.55):
+    """A paved promenade strip, with open water beyond it.
+
+    Two things this gets right that a plain ground plane did not:
+
+    * **It is a strip, not a disc.** A full-size ground plane extends to the
+      horizon and hides the sea completely — the backdrop becomes the plane's
+      own edge. Bounding it in Y lets the HDRI's water sit beyond the paving,
+      which is the whole point of a waterfront.
+    * **It is paved.** The plant is a flat, rigid plane, so smooth pavement is
+      the honest surface; grass implies compliant, uneven ground the sim does
+      not model, and riding a route across open turf depicts something a rider
+      would not do.
+
+    Flush at z = 0 throughout. No kerb: a kerb is terrain the plant does not
+    model, and the board would visibly ignore it.
+    """
+    bpy.ops.mesh.primitive_plane_add(size=1, location=(0, width / 2 - 5.0, 0))
+    path = bpy.context.object
+    path.name = "promenade"
+    path.scale = (length, width, 1)
+    bpy.ops.object.transform_apply(scale=True)
+    path.data.materials.append(
+        bs._textured("paving", CONCRETE,
+                     uv_scale=(length / 2.5, width / 2.5, 1.0), tint=tint))
+    return path
 
 
 def _outdoor(size: float = 400.0, tint: float = 0.55):
@@ -287,7 +316,8 @@ def main() -> int:
                     help="raise the aim point above the axle (a ridden board is tall)")
     ap.add_argument("--static", action="store_true",
                     help="locked-off camera aimed at the route centre")
-    ap.add_argument("--scene", default="garage", choices=["garage", "outdoor"])
+    ap.add_argument("--scene", default="garage",
+                    choices=["garage", "outdoor", "waterfront"])
     ap.add_argument("--cam-back", type=float, default=0.0,
                     help="park the camera this far behind the start (use with --lag 0)")
     ap.add_argument("--release-at", type=float, default=0.0,
@@ -312,7 +342,10 @@ def main() -> int:
 
     bs._clear_scene()
     _linear_keys()
-    if args.scene == "outdoor":
+    if args.scene == "waterfront":
+        bs._world(WATERFRONT_HDRI, args.hdri_strength, args.hdri_rot)
+        _promenade(tint=args.floor_tint)
+    elif args.scene == "outdoor":
         bs._world(OUTDOOR_HDRI, args.hdri_strength, args.hdri_rot)
         _outdoor()
     else:
@@ -324,7 +357,16 @@ def main() -> int:
                      release_frame=int(args.release_at * fps) if args.release_at else 0,
                      back=args.cam_back, static=args.static,
                      aim_up=args.aim_up)
-    bs._kicker(args.kicker)
+    # The waterfront key is a low sun roughly behind the subject, so the rim
+    # comes from that side and is warm; the garage key is overhead and cool.
+    if args.scene == "waterfront":
+        # Far back and physically large. Close in, an area light lays a bright
+        # elliptical pool on the paving that reads as a film-set spotlight on
+        # a beach at dusk. Distance flattens the falloff across the ground so
+        # the rim survives without the giveaway.
+        bs._kicker(args.kicker, warm=True, loc=(-9.0, 26.0, 5.0), size=12.0)
+    else:
+        bs._kicker(args.kicker)
 
     scene = bpy.context.scene
     scene.frame_start, scene.frame_end = (args.frame, args.frame) if args.frame else (1, n)

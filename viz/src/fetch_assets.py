@@ -29,6 +29,7 @@ ASSETS = ROOT / "viz" / "assets"
 # 2k textures are plenty for a benchtop that is mostly under the board.
 HDRIS = {
     "garage": dict(res="4k", fmt="hdr", why="Key light and background. A real home garage — roll-up doors, concrete, junk shelving. Chosen over autoshop_01 (reads as a commercial dealership) and carpentry_shop_02 (wrong trade, very yellow)."),
+    "the_sky_is_on_fire": dict(res="4k", fmt="hdr", why="Waterfront promenade at twilight — paved path, sea, railing, low warm sun. Dusk is the point: grading midday daylight down to sit on a dark page made it murky, whereas genuinely low light is dark for a reason. Rotated so the camera faces the water; there are apartment blocks on the far side and they stay out of frame, per the no-identifiable-place rule."),
     "approaching_storm": dict(res="4k", fmt="hdr", why="Outdoor scene for the shuttle run. Deliberately ANONYMOUS: open field, worn path, big sky, no skyline, landmarks, benches or pedestrians. Depicting an identifiable place would assert the board had been taken there, which it has not. Chosen over abandoned_pathway (bare winter trees, buildings on the horizon)."),
 }
 TEXTURES = {
