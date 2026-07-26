@@ -1,0 +1,15 @@
+# Scratch renders. Everything here is regenerable from committed inputs —
+# that is the point of V1 §9's reproducibility requirement, and it is why
+# nothing in out/ is worth versioning.
+out/
+
+# Downloaded CC0 assets. Large, and re-fetched deterministically by
+# viz/src/fetch_assets.py, which also records their licences in MANIFEST.json.
+# The manifest IS committed; the bytes are not.
+viz/assets/hdri/
+viz/assets/textures/
+
+__pycache__/
+*.pyc
+.DS_Store
+*.blend1

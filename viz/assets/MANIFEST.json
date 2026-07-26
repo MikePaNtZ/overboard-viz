@@ -1,0 +1,58 @@
+{
+  "note": "Asset provenance for every published Overboard render. See V1 \u00a79.",
+  "assets": [
+    {
+      "slug": "garage",
+      "kind": "hdri",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/garage",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Key light and background. A real home garage \u2014 roll-up doors, concrete, junk shelving. Chosen over autoshop_01 (reads as a commercial dealership) and carpentry_shop_02 (wrong trade, very yellow).",
+      "files": {
+        "garage_4k.hdr": "d5ea553ea4258381394a95efca888e5206e31ca62a20cdaa9910d8f1b6bdcdeb"
+      }
+    },
+    {
+      "slug": "wood_table_worn",
+      "kind": "texture",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/wood_table_worn",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Workbench top. In focus directly under the board, so it is the one texture that has to hold up.",
+      "files": {
+        "wood_table_worn/Diffuse.jpg": "165cdba449d56ea8e9675116622b95d7af372b7d7c47b8a98a03fcc630f1d51c",
+        "wood_table_worn/Rough.jpg": "4263780c4b7737b8714eefcbda1b43c28f8e1e0ee2b797c125521cbe6e3889dd",
+        "wood_table_worn/nor_gl.jpg": "a90aaa321194fb41d6e44776c6ee88134e4be416051357a3c9e323cc447c4cf0",
+        "wood_table_worn/Displacement.jpg": "6cd07277b91fcbe6567d72b1a86f581ae26765f810ffabe4a4d1451e22c3c901"
+      }
+    },
+    {
+      "slug": "concrete_floor_worn_001",
+      "kind": "texture",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/concrete_floor_worn_001",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Garage floor. Almost entirely defocused; present so the contact shadow has somewhere to land.",
+      "files": {
+        "concrete_floor_worn_001/Diffuse.jpg": "e29b45cdcd6d02fae3c087c456196ffa750779a9b62e7071aa3831dc322a0cc4",
+        "concrete_floor_worn_001/Rough.jpg": "b904992f0d75da2c41edf832bbb838622cca076f48f7913065a152c3b640690e",
+        "concrete_floor_worn_001/nor_gl.jpg": "3b782137e34d63fd59b2e92b4e27b2ee4d082caf9dd23f00dc7ab4da5513daef",
+        "concrete_floor_worn_001/Displacement.jpg": "793a833047c28b17344ca7543c32de39fb5d86d17e33ab380cf8639040d3a637"
+      }
+    },
+    {
+      "slug": "openwheel",
+      "kind": "mesh",
+      "source": "Openwheel (via overboard repo, sim/models/meshes/openwheel/)",
+      "url": "https://github.com/MikePaNtZ/overboard",
+      "licence": "MIT",
+      "attribution_required": true,
+      "attribution": "Openwheel \u2014 MIT. Copyright notice must be retained; see meshes/openwheel/NOTICE.md.",
+      "used_for": "The board itself: enclosures, footpads, bumpers, electronics platform.",
+      "files": {}
+    }
+  ]
+}

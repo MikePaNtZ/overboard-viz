@@ -1,0 +1,232 @@
+{
+  "schema_version": "0.1-v1.0-still",
+  "note": "Single-frame precursor to the .otrk pose track (V1 \u00a75). Same conventions, one frame.",
+  "conventions": {
+    "units": "SI metres",
+    "world_frame": "right-handed, +Z up",
+    "forward": "-X",
+    "quaternion": "(w, x, y, z), unit, body->world"
+  },
+  "source": {
+    "model_file": "/Users/mike/projects/overboard/sim/models/overboard_onewheel.xml",
+    "model_sha256": "6615bbc25cb1292a4482e80f198b71c8d7b1d6eb9cbe78979af97de02af2cac4",
+    "mujoco_version": "3.10.0"
+  },
+  "geoms": [
+    {
+      "name": "front_enclosure_geom",
+      "pos": [
+        2.4424906541753444e-15,
+        1.870248747537495e-18,
+        0.1453999999999999
+      ],
+      "quat": [
+        1.0,
+        1.436081687703824e-20,
+        2.883087028185064e-19,
+        0.0
+      ],
+      "material": {
+        "name": "shell_mat",
+        "rgba": [
+          0.0860000029206276,
+          0.13699999451637268,
+          0.18000000715255737,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "front_enclosure",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/front_enclosure.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "rear_enclosure_geom",
+      "pos": [
+        -2.220446049250313e-15,
+        5.692061405548898e-19,
+        0.14539999999999992
+      ],
+      "quat": [
+        1.0,
+        1.3986144078786084e-21,
+        -5.238609413062278e-20,
+        0.0
+      ],
+      "material": {
+        "name": "shell_mat",
+        "rgba": [
+          0.0860000029206276,
+          0.13699999451637268,
+          0.18000000715255737,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "rear_enclosure",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/rear_enclosure.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "front_footpad_geom",
+      "pos": [
+        2.3314683517128287e-15,
+        -2.834968878138011e-31,
+        0.14539999999999959
+      ],
+      "quat": [
+        6.12323399573678e-17,
+        3.412216260785864e-22,
+        -1.3896307335803522e-33,
+        1.0
+      ],
+      "material": {
+        "name": "footpad_mat",
+        "rgba": [
+          0.05900000035762787,
+          0.09799999743700027,
+          0.13300000131130219,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "front_footpad",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/front_footpad.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "rear_footpad_geom",
+      "pos": [
+        -2.4980018054066022e-15,
+        6.317050217590134e-32,
+        0.14539999999999953
+      ],
+      "quat": [
+        1.0,
+        -2.994174883555428e-34,
+        1.0546475438665893e-22,
+        0.0
+      ],
+      "material": {
+        "name": "footpad_mat",
+        "rgba": [
+          0.05900000035762787,
+          0.09799999743700027,
+          0.13300000131130219,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "rear_footpad",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/rear_footpad.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "electronics_platform_geom",
+      "pos": [
+        1.3877787807814457e-15,
+        -8.402566836762659e-19,
+        0.14540000000000003
+      ],
+      "quat": [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "material": {
+        "name": "platform_mat",
+        "rgba": [
+          0.16500000655651093,
+          0.6819999814033508,
+          0.5920000076293945,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "electronics_platform",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/electronics_platform.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "front_bumper_geom",
+      "pos": [
+        2.220446049250313e-15,
+        -9.107298248878237e-18,
+        0.14539999999999995
+      ],
+      "quat": [
+        1.0,
+        -1.9612241073615138e-20,
+        -5.040658466278562e-18,
+        0.0
+      ],
+      "material": {
+        "name": "bumper_mat",
+        "rgba": [
+          0.9490000009536743,
+          0.6349999904632568,
+          0.28999999165534973,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "front_bumper",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/front_bumper.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "rear_bumper_geom",
+      "pos": [
+        -2.3869795029440866e-15,
+        -1.713039432527097e-17,
+        0.14539999999999986
+      ],
+      "quat": [
+        1.0,
+        -1.69442408119373e-20,
+        -6.514636471574412e-18,
+        0.0
+      ],
+      "material": {
+        "name": "bumper_mat",
+        "rgba": [
+          0.9490000009536743,
+          0.6349999904632568,
+          0.28999999165534973,
+          1.0
+        ]
+      },
+      "kind": "mesh",
+      "mesh": "rear_bumper",
+      "file": "/Users/mike/projects/overboard/sim/models/meshes/openwheel/rear_bumper.stl",
+      "scale": 0.001
+    },
+    {
+      "name": "wheel_geom",
+      "pos": [
+        0.0,
+        0.0,
+        0.1454
+      ],
+      "quat": [
+        0.7071067811865476,
+        0.7071067811865475,
+        0.0,
+        0.0
+      ],
+      "material": {
+        "name": "tire_mat",
+        "rgba": [
+          0.07800000160932541,
+          0.10599999874830246,
+          0.13699999451637268,
+          1.0
+        ]
+      },
+      "kind": "cylinder",
+      "radius": 0.1454,
+      "half_width": 0.075
+    }
+  ]
+}
