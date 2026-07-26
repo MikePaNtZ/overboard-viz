@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """Render a pose track as a clip. V1.1.
 
+Defaults are the **G2 grade**, chosen 2026-07-26 for the overboard-web #now
+card. The plate has to sit inside the page's dark band (--bg #0F1922) or it
+reads as a lightbox glowing off a matte page — the single thing that makes a
+render look pasted into a design rather than built into it. The fix is value,
+not hue: the board's own colours are already the site's brand tokens.
+
+The camera sits almost on the floor for the same reason. At eye level the
+concrete filled most of the frame as a large flat pale mass — the brightest
+thing in the shot and, on the page, a lightbox. Dropping to 6 cm above the
+board's centre compresses the floor into the lower third and puts the dark
+garage behind the subject, which fixes the value problem and the composition
+in one move. Measured: floor luminance ~24/255 against the page's --bg at ~25.
+
     blender --background --factory-startup --python viz/src/render_clip.py -- [args]
     (drop --factory-startup for --engine CYCLES; the Cycles add-on is not
      loaded under factory startup)
@@ -39,7 +52,7 @@ TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
 CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
 
 
-def _floor(size: float = 200.0, uv_scale: float = 100.0):
+def _floor(size: float = 200.0, tint: float = 0.42):
     """Garage floor.
 
     Deliberately enormous. At 24 m the plane's far edge landed inside the shot
@@ -56,7 +69,7 @@ def _floor(size: float = 200.0, uv_scale: float = 100.0):
     floor = bpy.context.object
     floor.name = "floor"
     floor.data.materials.append(
-        bs._textured("concrete", CONCRETE, uv_scale=size / 2.0, tint=0.42))
+        bs._textured("concrete", CONCRETE, uv_scale=size / 2.0, tint=tint))
     return floor
 
 
@@ -172,12 +185,15 @@ def main() -> int:
     ap.add_argument("--samples", type=int, default=64)
     ap.add_argument("--width", type=int, default=1920)
     ap.add_argument("--height", type=int, default=1080)
-    ap.add_argument("--lens", type=float, default=55.0)
+    ap.add_argument("--lens", type=float, default=50.0)
     ap.add_argument("--lag", type=float, default=0.92)
-    ap.add_argument("--side", type=float, default=-1.90)
-    ap.add_argument("--height-offset", type=float, default=0.26)
+    ap.add_argument("--side", type=float, default=-1.62)
+    ap.add_argument("--height-offset", type=float, default=0.06)
     ap.add_argument("--hdri-rot", type=float, default=115.0)
-    ap.add_argument("--exposure", type=float, default=0.0)
+    ap.add_argument("--exposure", type=float, default=-0.5)
+    ap.add_argument("--hdri-strength", type=float, default=0.70)
+    ap.add_argument("--kicker", type=float, default=30.0)
+    ap.add_argument("--floor-tint", type=float, default=0.16)
     ap.add_argument("--out", type=Path, default=ROOT / "out/impulse_clip.mp4")
     ap.add_argument("--frame", type=int, default=0,
                     help="render this single frame only, for iteration")
@@ -199,12 +215,12 @@ def main() -> int:
 
     bs._clear_scene()
     _linear_keys()
-    bs._world(bs.HDRI, 1.05, args.hdri_rot)
-    _floor()
+    bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
+    _floor(tint=args.floor_tint)
     empties = _rig(track, manifest["bindings"])
     _animate(empties, track, n)
     _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset)
-    bs._kicker(18.0)
+    bs._kicker(args.kicker)
 
     scene = bpy.context.scene
     scene.frame_start, scene.frame_end = (args.frame, args.frame) if args.frame else (1, n)
