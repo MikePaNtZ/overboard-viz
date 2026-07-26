@@ -35,6 +35,7 @@ HDRIS = {
 TEXTURES = {
     "wood_table_worn": dict(res="2k", fmt="jpg", why="Workbench top. In focus directly under the board, so it is the one texture that has to hold up."),
     "concrete_floor_worn_001": dict(res="2k", fmt="jpg", why="Garage floor. Almost entirely defocused; present so the contact shadow has somewhere to land."),
+    "asphalt_02": dict(res="2k", fmt="jpg", why="The bike-trail surface. Worn concrete read as a wide featureless apron rather than a path; asphalt reads as a trail, which is the surface a rider would actually use."),
     "aerial_grass_rock": dict(res="2k", fmt="jpg", why="Outdoor ground. Texture only — the plant is a flat plane, so the render may not add camber, gravel or slope it does not model."),
     "dirt_floor": dict(res="2k", fmt="jpg", why="Alternate outdoor ground, path-like. Whichever of the two reads better under the anonymous-outdoor rule."),
 }

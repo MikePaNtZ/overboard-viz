@@ -53,34 +53,46 @@ CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
 OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
 WATERFRONT_HDRI = ROOT / "viz/assets/hdri/the_sky_is_on_fire_4k.hdr"
 GRASS = ROOT / "viz/assets/textures/aerial_grass_rock"
+ASPHALT = ROOT / "viz/assets/textures/asphalt_02"
 
 
-def _promenade(length: float = 400.0, width: float = 13.0, tint: float = 0.55):
-    """A paved promenade strip, with open water beyond it.
+def _bike_trail(length: float = 400.0, trail_w: float = 3.0,
+                far_edge: float = 7.5, tint: float = 0.75):
+    """A narrow asphalt trail with grass either side, and open water beyond.
 
-    Two things this gets right that a plain ground plane did not:
+    Three things this fixes over the first waterfront pass:
 
-    * **It is a strip, not a disc.** A full-size ground plane extends to the
-      horizon and hides the sea completely — the backdrop becomes the plane's
-      own edge. Bounding it in Y lets the HDRI's water sit beyond the paving,
-      which is the whole point of a waterfront.
-    * **It is paved.** The plant is a flat, rigid plane, so smooth pavement is
-      the honest surface; grass implies compliant, uneven ground the sim does
-      not model, and riding a route across open turf depicts something a rider
-      would not do.
+    * **Width.** A 13 m paved strip is an apron, not a path. A bike trail is
+      about 3 m, and at that width the surface reads as somewhere a rider would
+      actually ride rather than an undifferentiated grey plain.
+    * **Surface.** Worn concrete had no directional cue at all. Asphalt with
+      grass shoulders gives the eye an edge to follow, which is most of what
+      makes a path look like a path.
+    * **Water.** The ground now *ends* at `far_edge`. Previously it ran to the
+      horizon, so the sea was never visible — the backdrop was the plane's own
+      edge. Ending it closer, and raising the camera, widens the band of water
+      between that edge and the horizon.
 
-    Flush at z = 0 throughout. No kerb: a kerb is terrain the plant does not
-    model, and the board would visibly ignore it.
+    Everything is flush at z = 0. No kerb, no camber: the plant is a flat rigid
+    plane and the board would visibly ignore any relief added here.
     """
-    bpy.ops.mesh.primitive_plane_add(size=1, location=(0, width / 2 - 5.0, 0))
-    path = bpy.context.object
-    path.name = "promenade"
-    path.scale = (length, width, 1)
-    bpy.ops.object.transform_apply(scale=True)
-    path.data.materials.append(
-        bs._textured("paving", CONCRETE,
-                     uv_scale=(length / 2.5, width / 2.5, 1.0), tint=tint))
-    return path
+    def strip(name, y_centre, width, tex, uv_m, z=0.0, tnt=tint):
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y_centre, z))
+        o = bpy.context.object
+        o.name = name
+        o.scale = (length, width, 1)
+        bpy.ops.object.transform_apply(scale=True)
+        o.data.materials.append(bs._textured(
+            name, tex, uv_scale=(length / uv_m, width / uv_m, 1.0), tint=tnt))
+        return o
+
+    trail = strip("trail", 0.0, trail_w, ASPHALT, 2.5)
+    # Shoulders sit a hair below the asphalt so the trail edge stays crisp
+    # instead of z-fighting along its whole length.
+    far = (far_edge + trail_w / 2) / 2 + trail_w / 4
+    strip("verge_far", far, far_edge - trail_w / 2, GRASS, 2.0, z=-0.004, tnt=tint * 0.75)
+    strip("verge_near", -14.0, 26.0, GRASS, 2.0, z=-0.004, tnt=tint * 0.75)
+    return trail
 
 
 def _outdoor(size: float = 400.0, tint: float = 0.55):
@@ -344,7 +356,7 @@ def main() -> int:
     _linear_keys()
     if args.scene == "waterfront":
         bs._world(WATERFRONT_HDRI, args.hdri_strength, args.hdri_rot)
-        _promenade(tint=args.floor_tint)
+        _bike_trail(tint=args.floor_tint)
     elif args.scene == "outdoor":
         bs._world(OUTDOOR_HDRI, args.hdri_strength, args.hdri_rot)
         _outdoor()

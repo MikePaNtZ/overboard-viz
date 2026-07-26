@@ -68,6 +68,21 @@
       }
     },
     {
+      "slug": "asphalt_02",
+      "kind": "texture",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/asphalt_02",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "The bike-trail surface. Worn concrete read as a wide featureless apron rather than a path; asphalt reads as a trail, which is the surface a rider would actually use.",
+      "files": {
+        "asphalt_02/Diffuse.jpg": "28f5ba8690553f192c0e5e1a5ff40f34765b4b93f4cc7059b1a3e9c795b6c28c",
+        "asphalt_02/Rough.jpg": "b9a516b61b7040a9245ac206642d5f767ad9589a0169c4a1668221429e8a998c",
+        "asphalt_02/nor_gl.jpg": "ffe49db71a0fd34c1e259625df66a302a237597d6ef655307987ec4e45bc6f21",
+        "asphalt_02/Displacement.jpg": "943f254ed5e1504131547b35afe3798771cdda33842b7fdc6c0288b8312a44b0"
+      }
+    },
+    {
       "slug": "aerial_grass_rock",
       "kind": "texture",
       "source": "Poly Haven",

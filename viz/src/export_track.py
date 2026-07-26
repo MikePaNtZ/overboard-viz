@@ -143,7 +143,21 @@ def _export_shuttle(args) -> int:
     """
     from sim.scenarios.plant import build_model
 
-    params = shuttle.ShuttleParams()
+    name = "cruise" if getattr(args, "cruise", False) else "shuttle_run"
+    if getattr(args, "cruise", False):
+        # A single long leg. Same scenario, same cascade, same plant — only the
+        # commanded route differs, so nothing about its validity changes. The
+        # out-and-back exists to prove reversal and return-to-home; a cruise
+        # exists because a trail only reads as a trail when it recedes, and
+        # that needs sustained travel in one direction.
+        params = shuttle.ShuttleParams(
+            route=(shuttle.Leg("settle", hold_s=0.8),
+                   shuttle.Leg("cruise", distance_m=+args.cruise_m),
+                   shuttle.Leg("stop", hold_s=2.5)),
+            cruise_m_s=args.cruise_speed,
+        )
+    else:
+        params = shuttle.ShuttleParams()
     print(f"shuttle_run: {params.ballast_mass_kg} kg ballast at "
           f"{params.ballast_height_m} m, cruise {params.cruise_m_s} m/s …")
     result = shuttle.run(params, capture_state=True)
@@ -206,7 +220,7 @@ def _export_shuttle(args) -> int:
         "schema_version": "1.0",
         "source": {
             "kind": "sim",
-            "scenario": "shuttle_run",
+            "scenario": name,
             "plant": "ridden",
             "ballast_mass_kg": params.ballast_mass_kg,
             "ballast_height_m": params.ballast_height_m,
@@ -232,7 +246,7 @@ def _export_shuttle(args) -> int:
         arrays[f"quat/{b}"] = quat[b]
     arrays.update({f"ch/{k}": v for k, v in channels.items()})
 
-    out = args.out or ROOT / "viz/scenes/shuttle_run.otrk.npz"
+    out = args.out or ROOT / f"viz/scenes/{name}.otrk.npz"
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, **arrays)
     print(f"\nwrote {out.name}: {n} frames @ {args.fps}fps ({t[-1]:.2f}s), "
@@ -251,9 +265,13 @@ def main() -> int:
                     help="attach the real Rust PitchRegulator over the C ABI")
     ap.add_argument("--shuttle", action="store_true",
                     help="commanded-velocity route on the RIDDEN plant")
+    ap.add_argument("--cruise", action="store_true",
+                    help="one long forward leg instead of the out-and-back route")
+    ap.add_argument("--cruise-m", type=float, default=18.0)
+    ap.add_argument("--cruise-speed", type=float, default=1.2)
     args = ap.parse_args()
 
-    if args.shuttle:
+    if args.shuttle or args.cruise:
         return _export_shuttle(args)
 
     model = load_model()
