@@ -255,7 +255,9 @@ def _tracking_camera(track, n, lens: float, lag: float, side: float, height: flo
                 hold = (tgt.location.copy(), cam.location.copy())
             tgt.location, cam.location = hold[0], hold[1]
         else:
-            tgt.location = (bx, by, bz)
+            # aim_up applies here too: with a 1.4 m figure aboard, aiming at the
+            # axle points the camera at its feet and crops the head.
+            tgt.location = (bx, by, bz + aim_up)
             cam.location = (x0 + back + (bx - x0) * lag, by + side, bz + height)
         tgt.keyframe_insert("location", frame=i + 1)
         cam.keyframe_insert("location", frame=i + 1)
