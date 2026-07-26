@@ -223,7 +223,7 @@ BENCH_FINISH = {
     "rotor_can": dict(roughness=0.38, metallic=0.45, coat=0.00),
     "stator":    dict(roughness=0.42, metallic=0.40, coat=0.00),
     "hub":       dict(roughness=0.34, metallic=0.40, coat=0.00),
-    "plate":     dict(roughness=0.52, metallic=0.10, coat=0.05),
+    "plate":     dict(roughness=0.38, metallic=0.70, coat=0.00),
     # Painted-on index mark. Matte, because in hardware it is tape or paint —
     # if it reads as metal it looks like a machined feature with mass, and the
     # MJCF is explicit that it has none.
@@ -243,7 +243,8 @@ _BENCH_DEFAULT_FINISH = dict(roughness=0.45, metallic=0.30, coat=0.00)
 # the eye straight off the rig. A plain dark benchtop is the honest reading of
 # "a desk". Sizes and positions are never overridden — only colour.
 BENCH_RGBA_OVERRIDE = {
-    "desk": [0.208, 0.184, 0.161, 1.0],
+    "desk": [0.268, 0.230, 0.190, 1.0],
+    "plate": [0.560, 0.575, 0.590, 1.0],
 }
 
 # Geoms the MJCF models as solids but which are surface markings in hardware.
@@ -266,7 +267,45 @@ BENCH_DECAL = {
 }
 
 
-def _bench_rig(manifest):
+def _bench_detail(manifest, empties):
+    """Swap the plain MJCF primitives for recognisable hardware.
+
+    Returns the set of geom names that `bench_parts` has taken over, so the
+    generic builder skips them rather than drawing a bare cylinder inside a
+    detailed one. Dimensions still come from the model — see bench_parts.
+    """
+    import bench_parts as bp
+
+    by = {g["name"]: g for g in manifest["geoms"]}
+    rotor = empties.get("rotor")
+    world = empties.get("world")
+    taken = set()
+
+    if rotor and "rotor_can" in by:
+        g = by["rotor_can"]
+        bp.outrunner_can(rotor, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("rotor_can")
+    if rotor and "flywheel" in by:
+        g = by["flywheel"]
+        bp.flywheel(rotor, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("flywheel")
+    if world and "stator" in by:
+        g = by["stator"]
+        bp.stator_half(world, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("stator")
+    if world and "plate" in by:
+        g = by["plate"]
+        bp.plate_detail(world, g["size"], g["pos"])
+    if world and "desk" in by and "plate" in by:
+        d, p = by["desk"], by["plate"]
+        desk_top = d["pos"][2] + d["size"][2]
+        bp.clamp(world, p["pos"][0], p["pos"][1], desk_top, 2.0 * d["size"][2])
+        bp.controller(world, d["pos"][0] + 0.10, d["pos"][1] + 0.115, desk_top)
+        bp.desk_legs(world, d["pos"], d["size"], desk_top - bp.DESK_HEIGHT_M)
+    return taken
+
+
+def _bench_rig(manifest, detail: bool = False):
     """Build the bench rig from the geom table the exporter read off the MJCF.
 
     Nothing here is transcribed by hand. Sizes, offsets and orientations all
@@ -286,8 +325,11 @@ def _bench_rig(manifest):
 
     by_name = {g["name"]: g for g in manifest["geoms"]}
     decals = []
+    taken = _bench_detail(manifest, empties) if detail else set()
 
     for g in manifest["geoms"]:
+        if g["name"] in taken:
+            continue
         size, name = list(g["size"]), g["name"]
         pos = list(g["pos"])
 
@@ -357,7 +399,7 @@ def _bench_rig(manifest):
 
 
 def _bench_camera(lens: float, dist: float, azim: float, elev: float,
-                  target=(0.055, 0.02, 0.118)):
+                  target=(0.055, 0.02, 0.118), fstop: float = 3.2):
     """Locked off, and it has to be.
 
     The rig does not translate — one hinge, and the only motion in the frame is
@@ -391,7 +433,7 @@ def _bench_camera(lens: float, dist: float, azim: float, elev: float,
     # falls away and the eye is not asked to read the whole bench at once.
     cam.data.dof.use_dof = True
     cam.data.dof.focus_distance = (t - cam.location).length
-    cam.data.dof.aperture_fstop = 3.2
+    cam.data.dof.aperture_fstop = fstop
     return cam
 
 
@@ -583,6 +625,10 @@ def main() -> int:
                     help="bench scene: camera azimuth, degrees about +Z")
     ap.add_argument("--cam-elev", type=float, default=17.0,
                     help="bench scene: camera elevation, degrees")
+    ap.add_argument("--plain", action="store_true",
+                    help="bench scene: raw MJCF primitives, no dressed hardware")
+    ap.add_argument("--fstop", type=float, default=3.2,
+                    help="bench scene: aperture; lower is shallower focus")
     ap.add_argument("--cam-back", type=float, default=0.0,
                     help="park the camera this far behind the start (use with --lag 0)")
     ap.add_argument("--release-at", type=float, default=0.0,
@@ -612,13 +658,18 @@ def main() -> int:
         print(f"  bench rig: 1 frame = {ts['frames_per_timestep']} timestep "
               f"({ts['sim_dt_s']*1e3:.2f} ms) → {ts['playback_note']}")
         bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
-        empties = _bench_rig(manifest)
+        if not args.plain:
+            import bench_parts as _bp
+            _floor(size=60.0, tint=args.floor_tint).location.z = (
+                -_bp.DESK_HEIGHT_M)
+        empties = _bench_rig(manifest, detail=not args.plain)
         # Only the tracked bodies get keys. `world` carries the desk, plate and
         # stator — it is static by construction (they are ground in the MJCF),
         # and its empty stays at identity so those geoms sit where the model
         # puts them. Keyframing it would be inventing motion for the bench.
         _animate({b: empties[b] for b in track["bodies"]}, track, n)
-        _bench_camera(args.lens, args.cam_dist, args.cam_azim, args.cam_elev)
+        _bench_camera(args.lens, args.cam_dist, args.cam_azim, args.cam_elev,
+                      fstop=args.fstop)
         # Small, close and warm. The garage kicker is sized and placed for a
         # board on a floor; at bench scale it is both too far away and far too
         # strong, and it washes the disc face flat.
