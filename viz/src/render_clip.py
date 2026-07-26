@@ -50,6 +50,25 @@ import build_scene as bs  # noqa: E402  — the V1.0 scene, reused wholesale
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
 CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
+OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
+GRASS = ROOT / "viz/assets/textures/aerial_grass_rock"
+
+
+def _outdoor(size: float = 400.0, tint: float = 0.55):
+    """Open ground for the anonymous-outdoor scene.
+
+    Texture only. The plant is a flat plane, so the render may not add camber,
+    gravel, kerbs or slope it does not model — set dressing that invents
+    terrain is a claim about where the board can go. Same reason the HDRI was
+    chosen for having no skyline, landmarks, benches or people: depicting an
+    identifiable place asserts the board was taken there.
+    """
+    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+    ground = bpy.context.object
+    ground.name = "ground"
+    ground.data.materials.append(
+        bs._textured("outdoor_ground", GRASS, uv_scale=size / 2.5, tint=tint))
+    return ground
 
 
 def _floor(size: float = 200.0, tint: float = 0.42):
@@ -73,6 +92,29 @@ def _floor(size: float = 200.0, tint: float = 0.42):
     return floor
 
 
+def _capsule(b: dict):
+    """A MuJoCo capsule: Z-aligned, `radius` + `half_length` of the straight part.
+
+    Built as one cylinder with its rim circles bevelled by exactly the radius,
+    which produces the hemispherical caps — the same trick as the tyre crown.
+    Cheaper and less fragile than joining three meshes, and it stays a single
+    object so material assignment and parenting work like every other geom.
+    """
+    r, hl = b["radius"], b["half_length"]
+    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=r, depth=2 * (hl + r))
+    obj = bpy.context.object
+    bev = obj.modifiers.new("cap", "BEVEL")
+    bev.width, bev.segments = r * 0.999, 8
+    bev.limit_method = "ANGLE"
+    bev.angle_limit = math.radians(30)
+    return obj
+
+
+def _sphere(b: dict):
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=b["radius"])
+    return bpy.context.object
+
+
 def _rig(track, bindings):
     """Build the two driven empties and hang every mesh off them."""
     empties = {}
@@ -87,9 +129,15 @@ def _rig(track, bindings):
             before = set(bpy.data.objects)
             bpy.ops.wm.stl_import(filepath=b["file"], global_scale=b["scale"])
             obj = list(set(bpy.data.objects) - before)[0]
-        else:
+        elif b["kind"] == "cylinder":
             obj = bs._tyre({"radius": b["radius"], "half_width": b["half_width"],
                             "crown": 0.18})
+        elif b["kind"] == "capsule":
+            obj = _capsule(b)
+        elif b["kind"] == "sphere":
+            obj = _sphere(b)
+        else:
+            continue
         obj.name = b["name"]
 
         # Parent first, then set the local transform. Assigning .parent in
@@ -141,7 +189,8 @@ def _animate(empties, track, n):
 
 
 def _tracking_camera(track, n, lens: float, lag: float, side: float, height: float,
-                     release_frame: int = 0, back: float = 0.0):
+                     release_frame: int = 0, back: float = 0.0,
+                     static: bool = False, aim_up: float = 0.0):
     """A camera that travels with the board instead of watching it leave.
 
     The board covers 3.6 m. A locked-off camera would lose it in a second, and
@@ -167,6 +216,22 @@ def _tracking_camera(track, n, lens: float, lag: float, side: float, height: flo
     c.target = tgt
     c.track_axis, c.up_axis = "TRACK_NEGATIVE_Z", "UP_Y"
     bpy.context.scene.camera = cam
+
+    if static:
+        # A locked-off wide shot, for a route that comes back. Tracking a
+        # subject that returns to where it started cancels the reversal — the
+        # whole point of the shuttle run is that it goes out, stops, comes
+        # back and stops, and only a fixed frame lets a viewer see that.
+        # Centre on the midpoint of the travelled RANGE, not the mean position:
+        # the route holds station for four seconds at each end, so a mean is
+        # dragged toward wherever it paused longest and the shot ends up
+        # off-centre. Aim height is the subject's, not the axle's — with a
+        # 1.4 m figure aboard, framing on the axle points the camera at its feet.
+        lo, hi = pos.min(axis=0), pos.max(axis=0)
+        cx, cy = float((lo[0] + hi[0]) / 2), float((lo[1] + hi[1]) / 2)
+        tgt.location = (cx, cy, float(pos[0][2]) + aim_up)
+        cam.location = (cx + back, cy + side, float(pos[0][2]) + height)
+        return cam
 
     x0 = float(pos[0][0])
     # After release_frame the rig stops following and simply holds. For the
@@ -216,6 +281,11 @@ def main() -> int:
     ap.add_argument("--floor-tint", type=float, default=0.16)
     ap.add_argument("--out", type=Path, default=ROOT / "out/impulse_clip.mp4")
     ap.add_argument("--track", type=Path, default=DEFAULT_TRACK)
+    ap.add_argument("--aim-up", type=float, default=0.0,
+                    help="raise the aim point above the axle (a ridden board is tall)")
+    ap.add_argument("--static", action="store_true",
+                    help="locked-off camera aimed at the route centre")
+    ap.add_argument("--scene", default="garage", choices=["garage", "outdoor"])
     ap.add_argument("--cam-back", type=float, default=0.0,
                     help="park the camera this far behind the start (use with --lag 0)")
     ap.add_argument("--release-at", type=float, default=0.0,
@@ -240,13 +310,18 @@ def main() -> int:
 
     bs._clear_scene()
     _linear_keys()
-    bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
-    _floor(tint=args.floor_tint)
+    if args.scene == "outdoor":
+        bs._world(OUTDOOR_HDRI, args.hdri_strength, args.hdri_rot)
+        _outdoor()
+    else:
+        bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
+        _floor(tint=args.floor_tint)
     empties = _rig(track, manifest["bindings"])
     _animate(empties, track, n)
     _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset,
                      release_frame=int(args.release_at * fps) if args.release_at else 0,
-                     back=args.cam_back)
+                     back=args.cam_back, static=args.static,
+                     aim_up=args.aim_up)
     bs._kicker(args.kicker)
 
     scene = bpy.context.scene

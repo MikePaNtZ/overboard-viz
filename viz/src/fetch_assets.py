@@ -29,10 +29,13 @@ ASSETS = ROOT / "viz" / "assets"
 # 2k textures are plenty for a benchtop that is mostly under the board.
 HDRIS = {
     "garage": dict(res="4k", fmt="hdr", why="Key light and background. A real home garage — roll-up doors, concrete, junk shelving. Chosen over autoshop_01 (reads as a commercial dealership) and carpentry_shop_02 (wrong trade, very yellow)."),
+    "approaching_storm": dict(res="4k", fmt="hdr", why="Outdoor scene for the shuttle run. Deliberately ANONYMOUS: open field, worn path, big sky, no skyline, landmarks, benches or pedestrians. Depicting an identifiable place would assert the board had been taken there, which it has not. Chosen over abandoned_pathway (bare winter trees, buildings on the horizon)."),
 }
 TEXTURES = {
     "wood_table_worn": dict(res="2k", fmt="jpg", why="Workbench top. In focus directly under the board, so it is the one texture that has to hold up."),
     "concrete_floor_worn_001": dict(res="2k", fmt="jpg", why="Garage floor. Almost entirely defocused; present so the contact shadow has somewhere to land."),
+    "aerial_grass_rock": dict(res="2k", fmt="jpg", why="Outdoor ground. Texture only — the plant is a flat plane, so the render may not add camber, gravel or slope it does not model."),
+    "dirt_floor": dict(res="2k", fmt="jpg", why="Alternate outdoor ground, path-like. Whichever of the two reads better under the anonymous-outdoor rule."),
 }
 # Which PBR channels to pull. Poly Haven names vary a little by asset, so these
 # are tried in order and misses are tolerated rather than fatal.

@@ -14,6 +14,18 @@
       }
     },
     {
+      "slug": "approaching_storm",
+      "kind": "hdri",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/approaching_storm",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Outdoor scene for the shuttle run. Deliberately ANONYMOUS: open field, worn path, big sky, no skyline, landmarks, benches or pedestrians. Depicting an identifiable place would assert the board had been taken there, which it has not. Chosen over abandoned_pathway (bare winter trees, buildings on the horizon).",
+      "files": {
+        "approaching_storm_4k.hdr": "b276f7bec83037826820c87864bd29f5778416a58f9f0211a4c95cb2140fc273"
+      }
+    },
+    {
       "slug": "wood_table_worn",
       "kind": "texture",
       "source": "Poly Haven",
@@ -41,6 +53,36 @@
         "concrete_floor_worn_001/Rough.jpg": "b904992f0d75da2c41edf832bbb838622cca076f48f7913065a152c3b640690e",
         "concrete_floor_worn_001/nor_gl.jpg": "3b782137e34d63fd59b2e92b4e27b2ee4d082caf9dd23f00dc7ab4da5513daef",
         "concrete_floor_worn_001/Displacement.jpg": "793a833047c28b17344ca7543c32de39fb5d86d17e33ab380cf8639040d3a637"
+      }
+    },
+    {
+      "slug": "aerial_grass_rock",
+      "kind": "texture",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/aerial_grass_rock",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Outdoor ground. Texture only \u2014 the plant is a flat plane, so the render may not add camber, gravel or slope it does not model.",
+      "files": {
+        "aerial_grass_rock/Diffuse.jpg": "1a2ddfa4652adbe00447b940c40019d46f4b88245bc1b341cdf622c2110b7bc5",
+        "aerial_grass_rock/Rough.jpg": "fc0fff40e3378f2f54d225db6e3e566a8563bb2c143eef0f09b543c9d4698776",
+        "aerial_grass_rock/nor_gl.jpg": "c6aa14b042ce243f93a6ca807f46a085711c23ad316b104578e92df7770ee285",
+        "aerial_grass_rock/Displacement.jpg": "402db9334208ac6b505e4aa955ee9564d04073e5507b49adfc84282c26181dc8"
+      }
+    },
+    {
+      "slug": "dirt_floor",
+      "kind": "texture",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/dirt_floor",
+      "licence": "CC0",
+      "attribution_required": false,
+      "used_for": "Alternate outdoor ground, path-like. Whichever of the two reads better under the anonymous-outdoor rule.",
+      "files": {
+        "dirt_floor/Diffuse.jpg": "1afaf974bc016e5019f48f6590a53e3e3730f48ae2eb5a1717519ad89038f661",
+        "dirt_floor/Rough.jpg": "56d3faa1f0624c3e366d057596f50fe3264415a64c967830f61ca139b9a94bfc",
+        "dirt_floor/nor_gl.jpg": "da70ddc5c7d53d905d842ec189afbf7e2a7da84f281e94041346829b65f29786",
+        "dirt_floor/Displacement.jpg": "51ec6654074625a205f29e07e4c928ebfa5a892036303b6eb921c2791cc88403"
       }
     },
     {
