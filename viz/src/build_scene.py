@@ -117,8 +117,15 @@ def _principled(name: str, rgba, finish: dict):
     return mat
 
 
-def _textured(name: str, folder: Path, uv_scale: float):
-    """A PBR material from a Poly Haven texture folder (Diffuse/Rough/nor_gl)."""
+def _textured(name: str, folder: Path, uv_scale: float, tint: float = 1.0):
+    """A PBR material from a Poly Haven texture folder (Diffuse/Rough/nor_gl).
+
+    `tint` multiplies the albedo down. Needed because a mid-grey concrete
+    texture lit by a bright HDRI renders *lighter* than the same garage's own
+    floor inside that HDRI — so the subject ends up standing on a white
+    cyclorama with a dim garage pasted behind it. Matching the plane's value to
+    the environment map's floor is what fuses the two into one room.
+    """
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     nt = mat.node_tree
@@ -141,7 +148,19 @@ def _textured(name: str, folder: Path, uv_scale: float):
         return n
 
     if (d := tex("Diffuse.jpg", False)):
-        nt.links.new(d.outputs["Color"], b.inputs["Base Color"])
+        if tint != 1.0:
+            # VectorMath rather than the Mix node. Mix exposes a Factor/A/B
+            # socket per data type under the same names, so index lookups are
+            # easy to get wrong; VectorMath has exactly two vector inputs and
+            # no ambiguity. (Measured: the Mix version was in fact working —
+            # this is chosen for legibility, not to fix a bug.)
+            mul = nt.nodes.new("ShaderNodeVectorMath")
+            mul.operation = "MULTIPLY"
+            mul.inputs[1].default_value = (tint, tint, tint)
+            nt.links.new(d.outputs["Color"], mul.inputs[0])
+            nt.links.new(mul.outputs["Vector"], b.inputs["Base Color"])
+        else:
+            nt.links.new(d.outputs["Color"], b.inputs["Base Color"])
     if (r := tex("Rough.jpg", True)):
         nt.links.new(r.outputs["Color"], b.inputs["Roughness"])
     if (n := tex("nor_gl.jpg", True)):
