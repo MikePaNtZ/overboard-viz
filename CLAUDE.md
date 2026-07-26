@@ -28,9 +28,29 @@ measurement, while still leaving the authored pictures genuinely free.
 > Could a reader reproduce this frame from the committed `.otrk` plus the committed scene?
 > **Yes → Lane A. Anything else → Lane B.**
 
-"Anything else" includes: a hand-keyed camera move, invented geometry, a retimed or edited track,
-a pose that was nudged, a composite. If you are unsure, it is Lane B. Uncertainty resolves
-downward, always.
+"Anything else" includes: a hand-keyed camera move, invented geometry, a pose that was nudged, a
+composite, a trimmed cut that hides part of what happened. If you are unsure, it is Lane B.
+Uncertainty resolves downward, always.
+
+### Slow motion is Lane A; retiming is not
+
+These are not the same thing, and the difference decides whether fast events can be filmed at all.
+The bench rig's identification run is **20 ms** long, and its flywheel passes 13 rev/s inside
+150 ms — at 30 fps real time that is half a frame or an aliased blur. A blanket "any retiming is
+Lane B" would mean the fastest events could never be Lane A artefacts, which gets the rule exactly
+backwards: the measurement is the thing we most want to show.
+
+**Uniform slow motion stays Lane A** when all three hold:
+
+1. **Integer-exact.** One rendered frame is a whole number of simulation timesteps — normally
+   exactly one. No interpolation, no invented in-betweens, no duplicated frames.
+2. **Uniform.** One time scale for the whole clip. No ramping, no speeding through dull stretches.
+3. **Declared.** `time_scale` is recorded in the `.otrk` manifest *and* the render manifest, and
+   the figure is legible on the frame.
+
+All three together preserve the Lane A test exactly: a reader regenerates the sequence from the
+committed track and the committed scene. **Non-uniform retiming, interpolated in-betweens, and
+trims that hide are Lane B**, because none of them can be reproduced that way.
 
 ### Declaring the lane
 

@@ -255,6 +255,244 @@ def _export_shuttle(args) -> int:
     return 0
 
 
+def _geom_table(model) -> list:
+    """Every geom in the model as primitive parameters, in BODY-LOCAL space.
+
+    The bench rig is the first plant made entirely of MuJoCo primitives rather
+    than STL meshes, so there is no mesh file for the renderer to load and the
+    scene has to be built from numbers. Those numbers are read out of the
+    compiled model here instead of being transcribed into the Blender scene by
+    hand — which means a change to `sim/models/bench_rig.xml` propagates into
+    the render on the next export, and cannot silently disagree with it.
+
+    That matters more than convenience: a hand-copied desk overhang or disc
+    radius that drifts from the MJCF would make the film a picture of a rig
+    that was never simulated, while still passing every check we have.
+
+    ⚠️ Colour comes from the geom's MATERIAL when it has one, and only from
+    `geom_rgba` when it does not. A geom carrying `material="amber"` leaves
+    `geom_rgba` at MuJoCo's default 0.5 0.5 0.5 — so reading `geom_rgba` alone
+    silently renders the whole rig in flat grey that looks like a deliberate
+    neutral study rather than a bug. Resolve `geom_matid` first.
+
+    ⚠️ These values are sRGB, as everywhere in MJCF. Blender's Base Color is
+    linear. The renderer converts; do not convert twice.
+    """
+    _TYPE = {
+        mujoco.mjtGeom.mjGEOM_PLANE: "plane",
+        mujoco.mjtGeom.mjGEOM_SPHERE: "sphere",
+        mujoco.mjtGeom.mjGEOM_CAPSULE: "capsule",
+        mujoco.mjtGeom.mjGEOM_ELLIPSOID: "ellipsoid",
+        mujoco.mjtGeom.mjGEOM_CYLINDER: "cylinder",
+        mujoco.mjtGeom.mjGEOM_BOX: "box",
+    }
+    out = []
+    for gid in range(model.ngeom):
+        gtype = model.geom_type[gid]
+        if gtype not in _TYPE:
+            continue
+        body = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY,
+                                 model.geom_bodyid[gid])
+        matid = int(model.geom_matid[gid])
+        rgba = (model.mat_rgba[matid] if matid >= 0 else model.geom_rgba[gid])
+        out.append({
+            "name": mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, gid),
+            "body": body or "world",
+            "type": _TYPE[gtype],
+            # Local to the parent body, so the renderer parents each geom to an
+            # empty driven by that body's track and never re-derives a pose.
+            "pos": [float(v) for v in model.geom_pos[gid]],
+            "quat": [float(v) for v in model.geom_quat[gid]],
+            "size": [float(v) for v in model.geom_size[gid]],
+            "rgba_srgb": [float(v) for v in rgba],
+            "material": (mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MATERIAL, matid)
+                         if matid >= 0 else None),
+            "mass_kg": float(model.body_mass[model.geom_bodyid[gid]]),
+        })
+    return out
+
+
+def _export_bench(args) -> int:
+    """The wave-0 bench rig: one outrunner, one flywheel, one hinge.
+
+    This is NOT the board and NOT the board-in-a-fixture that the Bench
+    Test-Stand design doc describes — see that doc's §3, which specifies side
+    plates picking up the axle bolts. What Mechanical actually built first is a
+    desk-scale rig whose job is to prove the *identification method* on hardware
+    we own before it is pointed at a hub motor we do not. Anything published
+    from this footage has to say that, or it reads as progress on the board.
+
+    WHY THIS IS SHOT IN SLOW MOTION, AND WHY THAT IS STILL LANE A
+    ------------------------------------------------------------
+    The identify run is 20 ms long and the loaded disc passes 13 rev/s inside
+    150 ms. At 30 fps real time it is either half a frame or an aliased blur;
+    there is no honest real-time cut of it.
+
+    So one rendered frame is exactly ONE MuJoCo timestep — no interpolation, no
+    duplicated frames, no invented in-betweens. Playing 2000 Hz of simulation
+    at 30 fps is uniform 66.7x slow motion, the time scale is recorded in the
+    manifest, and the renderer burns it into the frame. Every frame remains a
+    measurement, which is the Lane A test: a reader can regenerate this exact
+    sequence from the committed .otrk and the committed scene.
+
+    (Uniform, declared, integer-exact retiming is the only retiming that keeps
+    that property. Non-uniform retiming, trimming that hides, or interpolated
+    in-betweens do not, and are Lane B.)
+    """
+    from sim.scenarios import bench_spinup as bench
+    from sim.scenarios.imperfections import STAGE0_PLACEHOLDER, ImperfectionState
+
+    loaded = args.bench_variant != "bare"
+    model = bench.load_model() if loaded else bench.build_bare_model()
+    ip = bench.IdentifyParams()
+    dt = float(model.opt.timestep)
+
+    # Mechanical's own fit, run first. Its reported ramp slopes are the
+    # reference this export is checked against below, so a divergence between
+    # what they measure and what this films fails loudly instead of shipping.
+    ident = bench.identify(ip)
+    ref_alpha = (ident.metrics.alpha_loaded_rad_s2 if loaded
+                 else ident.metrics.alpha_bare_rad_s2)
+
+    print(f"bench identify ({'flywheel-loaded' if loaded else 'bare rotor'}): "
+          f"{ip.commanded_current_a} A held, dt={dt*1e3:.2f} ms")
+    print(f"  kt_fit      = {ident.metrics.kt_fit_nm_per_a:.5f} N·m/A")
+    print(f"  J_bare_fit  = {ident.metrics.j_bare_fit_kg_m2:.4e} kg·m²")
+    print(f"  J_disc      = {ident.metrics.j_disc_known_kg_m2:.4e} kg·m² (known)")
+    print(f"  alpha ref   = {ref_alpha:.1f} rad/s²")
+
+    # Re-run the identical held-current drive, logging true shaft angle. The
+    # scenario's own result carries the SENSED rate only (quantised through the
+    # imperfection profile), and integrating that would accumulate quantisation
+    # error into the disc's visible angle — a small, plausible-looking lie.
+    # The profile owns a seeded generator and a fresh ImperfectionState per run,
+    # so this reproduces their drive bit-for-bit.
+    n_steps = int(round(args.bench_seconds / dt))
+    data = mujoco.MjData(model)
+    imp = ImperfectionState(profile=STAGE0_PLACEHOLDER, dt_s=dt)
+    mujoco.mj_forward(model, data)
+
+    qpos = np.zeros(n_steps, np.float64)
+    qvel = np.zeros(n_steps, np.float64)
+    w_sensed = np.zeros(n_steps, np.float64)
+    tau = np.zeros(n_steps, np.float64)
+    t = np.zeros(n_steps, np.float64)
+    for k in range(n_steps):
+        current = imp.apply_current(ip.commanded_current_a)
+        data.ctrl[0] = current * bench.NAMEPLATE_KT_NM_PER_A
+        mujoco.mj_step(model, data)
+        qpos[k] = data.qpos[0]
+        qvel[k] = data.qvel[0]
+        # The same degraded channel the identification actually fits — see the
+        # cross-check below for why the render logs it as well as truth.
+        w_sensed[k] = imp.wheel_rate(float(data.qvel[0]), float(data.time))
+        tau[k] = data.ctrl[0]
+        t[k] = data.time
+
+    # Cross-check against Mechanical's fit, using THEIR fitter on THEIR
+    # quantity. This has to be the sensed rate, not MuJoCo truth: over the 5 ms
+    # fit window a 1 ms actuation delay and a 500 Hz update staircase bend the
+    # measurable ramp well away from the ideal kt*i/J, and fitting truth here
+    # reports ~385 rad/s² against their 269 — a 43% "divergence" that is really
+    # just two different signals. Comparing like with like is what makes this a
+    # real guard rather than a tripwire that has to be loosened until it passes.
+    slope, r2 = bench._fit_line(t, w_sensed, ip.fit_window_s)
+    err = abs(slope - ref_alpha) / abs(ref_alpha)
+    if err > 0.02:
+        raise SystemExit(
+            f"bench export diverged from sim.scenarios.bench_spinup.identify(): "
+            f"re-run alpha={slope:.1f} rad/s² vs reported {ref_alpha:.1f} "
+            f"({err:.1%} > 2%). The film would not be of the run whose numbers "
+            f"it carries. Refusing to write the track."
+        )
+    print(f"  alpha re-run= {slope:.1f} rad/s² (R²={r2:.4f})  "
+          f"✓ within {err:.2%} of the fit")
+
+    BODIES = ["rotor"]
+    bid = {b: mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, b) for b in BODIES}
+    pos = {b: np.zeros((n_steps, 3), np.float32) for b in BODIES}
+    quat = {b: np.zeros((n_steps, 4), np.float32) for b in BODIES}
+    for k in range(n_steps):
+        data.qpos[0] = qpos[k]
+        mujoco.mj_forward(model, data)
+        for b in BODIES:
+            pos[b][k] = data.xpos[bid[b]]
+            quat[b][k] = data.xquat[bid[b]]
+
+    time_scale = 1.0 / (args.fps * dt)  # sim seconds per played second
+    rev = qpos / (2.0 * np.pi)
+    name = f"bench_identify_{'loaded' if loaded else 'bare'}"
+
+    manifest = {
+        "schema_version": "1.0",
+        "lane": "A",
+        "source": {
+            "kind": "sim",
+            "scenario": name,
+            "plant": "bench_rig wave-0 (desk-scale)",
+            "model_file": "sim/models/bench_rig.xml",
+            "model_sha256": hashlib.sha256(
+                bench.MODEL_PATH.read_bytes()).hexdigest(),
+            "commanded_current_a": ip.commanded_current_a,
+            "imperfection_profile": STAGE0_PLACEHOLDER.profile_id,
+            "mujoco_version": mujoco.__version__,
+            "exporter_version": "otrk-export 1.1.0",
+        },
+        # One frame is one timestep. `fps` is the PLAYBACK rate; `time_scale`
+        # is how much slower than life that is, and the renderer must display
+        # it. Anything that reads this file and ignores time_scale will present
+        # a 20 ms event as if it took ten seconds.
+        "time": {
+            "fps": args.fps,
+            "n_frames": n_steps,
+            "duration_s": float(t[-1]),
+            "sim_dt_s": dt,
+            "frames_per_timestep": 1,
+            "time_scale": time_scale,
+            "playback_note": f"{time_scale:.1f}x slow motion",
+        },
+        "bodies": BODIES,
+        "channels": ["shaft_rad", "shaft_rad_s", "shaft_rev", "cmd_torque_nm"],
+        "events": [],
+        "hints": {"subject_body": "rotor", "ground_z": 0.0,
+                  "static_bodies": ["world"]},
+        "conventions": {
+            "units": "SI metres", "world_frame": "right-handed, +Z up",
+            "quaternion": "(w, x, y, z), unit, body->world",
+        },
+        # The scene itself, read out of the compiled model — see _geom_table.
+        "geoms": _geom_table(model),
+        "bindings": None,
+        # Carried so the render can caption itself without anyone re-typing a
+        # number that has since been refitted. Lane A may show these; Lane B
+        # may not show any of them.
+        "fit": ident.metrics.__dict__ | {"alpha_rerun_rad_s2": slope},
+    }
+
+    arrays = {
+        "manifest": json.dumps(manifest),
+        "t": t,
+        "ch/shaft_rad": qpos.astype(np.float32),
+        "ch/shaft_rad_s": qvel.astype(np.float32),
+        "ch/shaft_rev": rev.astype(np.float32),
+        "ch/cmd_torque_nm": tau.astype(np.float32),
+    }
+    for b in BODIES:
+        arrays[f"pos/{b}"] = pos[b]
+        arrays[f"quat/{b}"] = quat[b]
+
+    out = args.out or ROOT / f"viz/scenes/lane_a/{name}.otrk.npz"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, **arrays)
+    print(f"\nwrote {out.relative_to(ROOT)}: {n_steps} frames "
+          f"({t[-1]*1e3:.0f} ms of sim) → {n_steps/args.fps:.1f}s at "
+          f"{args.fps}fps = {time_scale:.1f}x slow motion")
+    print(f"  peak {qvel.max():.1f} rad/s ({qvel.max()/(2*np.pi):.1f} rev/s), "
+          f"{rev[-1]:.2f} revolutions total")
+    print(f"  size {out.stat().st_size / 1024:.0f} KiB")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fps", type=int, default=30)
@@ -269,7 +507,18 @@ def main() -> int:
                     help="one long forward leg instead of the out-and-back route")
     ap.add_argument("--cruise-m", type=float, default=18.0)
     ap.add_argument("--cruise-speed", type=float, default=1.2)
+    ap.add_argument("--bench", action="store_true",
+                    help="wave-0 desk bench rig: held-current flywheel spin-up")
+    ap.add_argument("--bench-variant", default="loaded",
+                    choices=["loaded", "bare"],
+                    help="flywheel fitted, or the bare rotor it is fitted against")
+    ap.add_argument("--bench-seconds", type=float, default=0.15,
+                    help="sim seconds to capture; every timestep becomes one "
+                         "frame, so 0.15 s is 300 frames = 10 s at 30 fps")
     args = ap.parse_args()
+
+    if args.bench:
+        return _export_bench(args)
 
     if args.shuttle or args.cruise:
         return _export_shuttle(args)
