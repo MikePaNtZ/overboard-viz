@@ -78,7 +78,7 @@ def _bike_trail(length: float = 400.0, trail_w: float = 3.0,
     plane and the board would visibly ignore any relief added here.
     """
     def strip(name, y_centre, width, tex, uv_m, z=0.0, tnt=tint):
-        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y_centre, z))
+        bpy.ops.mesh.primitive_preplaydd(size=1, location=(0, y_centre, z))
         o = bpy.context.object
         o.name = name
         o.scale = (length, width, 1)
@@ -105,7 +105,7 @@ def _outdoor(size: float = 400.0, tint: float = 0.55):
     chosen for having no skyline, landmarks, benches or people: depicting an
     identifiable place asserts the board was taken there.
     """
-    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
     ground = bpy.context.object
     ground.name = "ground"
     ground.data.materials.append(
@@ -126,7 +126,7 @@ def _floor(size: float = 200.0, tint: float = 0.42):
     plane does; scaling one without the other is how the texture ends up
     stretched into invisible smears.
     """
-    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
     floor = bpy.context.object
     floor.name = "floor"
     floor.data.materials.append(
@@ -544,13 +544,13 @@ def _write_render_manifest(args, track_manifest, n, fps) -> Path:
     """Emit the per-render manifest: lane, and the hash of the track it replays.
 
     Required of every render by the two-lane rule. The hash is the part that
-    does the work — it is what lets someone who is not us check a Lane A claim
+    does the work — it is what lets someone who is not us check a Sim Replay claim
     instead of taking it on trust. Without it, "reproducible from the committed
-    track" is an assertion; with it, anyone can hash `viz/scenes/lane_a/*.otrk.npz`
+    track" is an assertion; with it, anyone can hash `viz/scenes/replay/*.otrk.npz`
     and see whether this is the run they were shown.
 
     The lane is read from the track, not chosen here, so a render cannot
-    quietly upgrade itself to Lane A by passing a flag.
+    quietly upgrade itself to Sim Replay by passing a flag.
     """
     lane = track_manifest.get("lane")
     if lane not in ("A", "B"):
@@ -581,7 +581,7 @@ def _write_render_manifest(args, track_manifest, n, fps) -> Path:
         # be lost by someone reading only the render manifest.
         "time_scale": ts.get("time_scale", 1.0),
         "playback_note": ts.get("playback_note", "real time"),
-        # Lane A carries no signature by construction: it is a replay, and the
+        # Sim Replay carries no signature by construction: it is a replay, and the
         # mark exists to disclose authorship, of which there is none here.
         "signature": None if lane == "A" else "required",
         "attribution": "Board meshes: Openwheel (MIT). HDRI/textures: Poly Haven (CC0). "

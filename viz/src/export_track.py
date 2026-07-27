@@ -332,12 +332,12 @@ def _export_bench(args) -> int:
     duplicated frames, no invented in-betweens. Playing 2000 Hz of simulation
     at 30 fps is uniform 66.7x slow motion, the time scale is recorded in the
     manifest, and the renderer burns it into the frame. Every frame remains a
-    measurement, which is the Lane A test: a reader can regenerate this exact
+    measurement, which is the Sim Replay test: a reader can regenerate this exact
     sequence from the committed .otrk and the committed scene.
 
     (Uniform, declared, integer-exact retiming is the only retiming that keeps
     that property. Non-uniform retiming, trimming that hides, or interpolated
-    in-betweens do not, and are Lane B.)
+    in-betweens do not, and are Concept.)
     """
     from sim.scenarios import bench_spinup as bench
     from sim.scenarios.imperfections import STAGE0_PLACEHOLDER, ImperfectionState
@@ -464,7 +464,7 @@ def _export_bench(args) -> int:
         "geoms": _geom_table(model),
         "bindings": None,
         # Carried so the render can caption itself without anyone re-typing a
-        # number that has since been refitted. Lane A may show these; Lane B
+        # number that has since been refitted. Sim Replay may show these; Concept
         # may not show any of them.
         "fit": ident.metrics.__dict__ | {"alpha_rerun_rad_s2": slope},
     }
@@ -481,7 +481,7 @@ def _export_bench(args) -> int:
         arrays[f"pos/{b}"] = pos[b]
         arrays[f"quat/{b}"] = quat[b]
 
-    out = args.out or ROOT / f"viz/scenes/lane_a/{name}.otrk.npz"
+    out = args.out or ROOT / f"viz/scenes/replay/{name}.otrk.npz"
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, **arrays)
     print(f"\nwrote {out.relative_to(ROOT)}: {n_steps} frames "

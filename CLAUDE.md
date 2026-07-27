@@ -8,39 +8,47 @@ Handoff / onboarding doc (read first, it holds the context this file assumes):
 [Handoff — Digital Content Production](https://app.notion.com/p/3a9472a5fb69811fb4bdc968830585a6).
 Design of record: [V1 — Cinematic Visualization Pipeline](https://app.notion.com/p/3a9472a5fb698124927bffb8e8b690a4).
 
-## The two-lane rule (HARD — governs everything made here)
+## The category rule (HARD — governs everything made here)
 
-Every artefact this repo produces is **Lane A** or **Lane B**. There is no third state and no
-unlabelled state. The lanes exist so that a viewer can never mistake an authored picture for a
-measurement, while still leaving the authored pictures genuinely free.
+> 📖 **Definitions live in exactly one place:** [Overboard — Shared Vocabulary (canonical)](https://app.notion.com/p/3aa472a5fb6981ebaaa7cf2e996f1e8b).
+> **Do not restate them here.** A definition kept in two places diverges within a week — that is
+> what forced the Lane A/B rename. This file carries the *operational* rules only: paths, stamping,
+> and what to do when you are unsure.
 
-| | **Lane A — replay** | **Lane B — authored** |
+Every artefact this repo produces is **Sim Replay** or **Concept**. There is no unlabelled state.
+`Footage` (a real camera) and `Hardware Replay` (this same scene driven by real telemetry) exist in
+the canonical vocabulary and will land here at Phase 1 — **build the source tag as a parameter so
+`HARDWARE` needs no code change.**
+
+| | **Sim Replay** | **Concept** |
 |---|---|---|
-| Definition | Reproducible from a committed `.otrk` plus the committed scene | Everything else |
+| Directory | `viz/scenes/replay/` | `viz/scenes/concept/` |
 | Engineering numbers, HUD | **Allowed** | **Never** |
 | Tense of accompanying copy | Past — it happened | **Future/subjunctive** — "what it *will* look like" |
 | May depict an event as having occurred | Yes | **No** |
-| Signature in frame | **None** | **Persistent, default-on** |
+| Mark in frame | Source tag — `SIM` | `CONCEPT`, persistent, default-on |
 | Visual freedom | Bounded by the plant | Unconstrained |
+
+**A Replay always names its source. There is no bare "Replay."**
 
 **The test — apply it to every frame:**
 
 > Could a reader reproduce this frame from the committed `.otrk` plus the committed scene?
-> **Yes → Lane A. Anything else → Lane B.**
+> **Yes → Sim Replay. Anything else → Concept.**
 
 "Anything else" includes: a hand-keyed camera move, invented geometry, a pose that was nudged, a
-composite, a trimmed cut that hides part of what happened. If you are unsure, it is Lane B.
+composite, a trimmed cut that hides part of what happened. If you are unsure, it is Concept.
 Uncertainty resolves downward, always.
 
-### Slow motion is Lane A; retiming is not
+### Slow motion is Sim Replay; retiming is not
 
 These are not the same thing, and the difference decides whether fast events can be filmed at all.
 The bench rig's identification run is **20 ms** long, and its flywheel passes 13 rev/s inside
 150 ms — at 30 fps real time that is half a frame or an aliased blur. A blanket "any retiming is
-Lane B" would mean the fastest events could never be Lane A artefacts, which gets the rule exactly
+Concept" would mean the fastest events could never be Sim Replay artefacts, which gets the rule exactly
 backwards: the measurement is the thing we most want to show.
 
-**Uniform slow motion stays Lane A** when all three hold:
+**Uniform slow motion stays Sim Replay** when all three hold:
 
 1. **Integer-exact.** One rendered frame is a whole number of simulation timesteps — normally
    exactly one. No interpolation, no invented in-betweens, no duplicated frames.
@@ -48,29 +56,29 @@ backwards: the measurement is the thing we most want to show.
 3. **Declared.** `time_scale` is recorded in the `.otrk` manifest *and* the render manifest, and
    the figure is legible on the frame.
 
-All three together preserve the Lane A test exactly: a reader regenerates the sequence from the
+All three together preserve the Sim Replay test exactly: a reader regenerates the sequence from the
 committed track and the committed scene. **Non-uniform retiming, interpolated in-betweens, and
-trims that hide are Lane B**, because none of them can be reproduced that way.
+trims that hide are Concept**, because none of them can be reproduced that way.
 
-### Declaring the lane
+### Declaring the category
 
 **Choosing the directory IS the declaration.** It is not a metadata field someone can forget to
 set, and it is not a caption that can be stripped.
 
 ```
-viz/scenes/lane_a/     viz/src/lane_a/     — replay scenes
-viz/scenes/lane_b/     viz/src/lane_b/     — authored scenes
+viz/scenes/replay/     viz/src/replay/     — replay scenes
+viz/scenes/concept/     viz/src/concept/     — authored scenes
 ```
 
 ⚠️ **Adaptation, because this repo has no `.blend` files on disk.** The rule as handed down says
 "which directory you save the `.blend` in is the declaration". Today every scene here is *Python*
 built procedurally by `build_scene.py` / `render_clip.py` — there are zero `.blend` files in the
 tree. So the declaration is **the directory of the scene module**, and of the `.blend` too once
-any are saved. Same principle, same guarantee: the path on disk carries the lane.
+any are saved. Same principle, same guarantee: the path on disk carries the category.
 
 ### The signature — call it a signature, not a watermark
 
-Lane B carries a **persistent in-frame signature**, **default-on in the scene template**. Not
+Concept carries a **persistent in-frame signature**, **default-on in the scene template**. Not
 opt-in, not added at encode time. Burn it into frames so re-encoding, trimming or pulling a still
 cannot drop it (`stamp_frames.py` exists for exactly this and was built that way deliberately).
 
@@ -80,34 +88,34 @@ does.
 
 ### Every render emits a manifest
 
-Recording **lane** plus the **`.otrk` hash**. The hash is what makes a Lane A claim checkable by
+Recording **category** plus the **`.otrk` hash**. The hash is what makes a Sim Replay claim checkable by
 someone who is not us; without it "reproducible from the committed track" is an assertion rather
 than a fact. **Not built yet** — `render_clip.py` currently reads the manifest embedded in the
 `.otrk` but emits nothing of its own. Until it does, no render is fully compliant. See Open items.
 
 ### Standing quota
 
-**Every Lane B publication is paired with or preceded by a Lane A one**, and **Lane A is the hero
-format for milestones.** Lane B never ships alone and never carries a milestone. The reason is
+**Every Concept publication is paired with or preceded by a Sim Replay one**, and **Sim Replay is the hero
+format for milestones.** Concept never ships alone and never carries a milestone. The reason is
 structural: a project whose thesis is honest engineering cannot let the pretty authored picture be
 the thing that represents an achievement.
 
-### Three former tenets, withdrawn for Lane B (CEO, 2026-07-26)
+### Three former tenets, withdrawn for Concept (CEO, 2026-07-26)
 
-These were binding on all output until 2026-07-26. The CEO has **overruled all three for Lane B**:
+These were binding on all output until 2026-07-26. The CEO has **overruled all three for Concept**:
 
 - ~~No identifiable place~~ — withdrawn. **Seattle is explicitly wanted.**
 - ~~No terrain the plant does not model~~ — withdrawn.
 - ~~No photoreal rider~~ — withdrawn.
 
-**Lane A keeps all three by construction**, not by agreement — Lane A is a replay of the plant, and
+**Sim Replay keeps all three by construction**, not by agreement — Sim Replay is a replay of the plant, and
 the plant is a flat rigid plane with no rider dynamics and no geography. Nothing enforces these in
-Lane A; the lane's definition already excludes them.
+Sim Replay; the category definition already excludes them.
 
 Consequence worth stating plainly: the old "the abstraction is the disclosure" argument — a mint
 stick-figure rider makes it self-evidently not real footage, so no mark is needed — **does not
-survive into Lane B**, because Lane B may now be photoreal in a real place. The signature replaces
-it. That is precisely why Lane B's signature is non-optional.
+survive into Concept**, because Concept may now be photoreal in a real place. The signature replaces
+it. That is precisely why Concept's signature is non-optional.
 
 ## Provenance of authored assets
 
@@ -119,7 +127,7 @@ public commit:
 3. **Whether it was AI-generated** — state it either way, explicitly.
 
 On a project whose thesis is honest AI use, this question *will* be asked. It is cheap now and
-expensive later. This applies to every authored Lane B asset, not only the rider.
+expensive later. This applies to every authored Concept asset, not only the rider.
 
 `viz/assets/MANIFEST.json` is the existing licence-compliance record — source, licence and sha256
 per file — and stays current. Published material must retain the **MIT Openwheel** copyright
@@ -162,7 +170,7 @@ reproducibility requirement. Downloaded CC0 assets (`viz/assets/hdri/`, `viz/ass
 likewise re-fetched deterministically by `fetch_assets.py`; **the manifest is committed, the bytes
 are not.**
 
-What *is* committed and must stay committed: the `.otrk` tracks in `viz/scenes/` (small, and Lane A
+What *is* committed and must stay committed: the `.otrk` tracks in `viz/scenes/` (small, and Sim Replay
 is meaningless without them), `MANIFEST.json`, and source.
 
 ⚠️ **`masters/` is currently in violation** — 21 files, 27 MB, tracked since the repo was created,
@@ -211,7 +219,7 @@ Documented at length in the source and in `README.md`; summarised so they are no
 - **MuJoCo → Blender needs no axis conversion** (both right-handed, +Z up, scalar-first
   quaternions). Do not add a swap.
 - **Insert keyframes LINEAR.** Every frame is a measurement; Bezier invents motion — which in
-  Lane A is fabrication, not a smoothing choice.
+  Sim Replay is fabrication, not a smoothing choice.
 - **Do not smooth-shade a flat end cap** — every primitive gets `EDGE_SPLIT` alongside `use_smooth`.
 - **Blender 5 moved Actions to slots**; `action.fcurves` no longer exists.
 - **This Blender build has no FFmpeg output.** Render PNGs, encode with `ffmpeg` separately.
@@ -225,10 +233,10 @@ Documented at length in the source and in `README.md`; summarised so they are no
 
 ## Open items (named, so they are not silently inherited)
 
-1. **`lane_a/` / `lane_b/` directories do not exist yet**, and the 21 shipped artefacts in
+1. **`replay/` / `concept/` directories do not exist yet**, and the 21 shipped artefacts in
    `masters/` are unclassified. Classifying them is a prerequisite to the quota meaning anything.
-2. **Render manifest (lane + `.otrk` hash) is not implemented.**
-3. **Lane B signature is not implemented as a default-on scene-template element.**
+2. **Render manifest (category + `.otrk` hash) is not implemented.**
+3. **Concept signature is not implemented as a default-on scene-template element.**
 4. **`masters/` migration to GitHub Releases** (see above). No history rewrite.
 5. **No CI**, so "green CI is the gate" currently has nothing to enforce it.
 6. **No `docs/decisions/`** in this repo or either sibling — nothing is Ratified anywhere.

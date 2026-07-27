@@ -5,7 +5,7 @@ WHAT THIS IS, AND WHAT IT IS NOT
 --------------------------------
 This is **not** a replay of anything. No `.otrk`, no simulation, no measurement.
 It is a drawing of a fixture that has not been designed yet, made to argue for a
-shape. It therefore lives in Lane B and obeys Lane B's rules without exception:
+shape. It therefore lives in Concept and obeys Concept's rules without exception:
 
   * it carries a **persistent signature**, default-on, burned into the frame;
   * it carries **no engineering numbers** of any kind;
@@ -183,9 +183,9 @@ def main() -> int:
     scene.render.filepath = str(args.out.with_suffix(""))
     bpy.ops.render.render(write_still=True)
 
-    # Lane B declares itself in the scene directory AND in the manifest. There
-    # is no track to hash, and that absence is exactly what makes this Lane B.
-    decl = ROOT / "viz/scenes/lane_b/bench_fixture_concept.json"
+    # Concept declares itself in the scene directory AND in the manifest. There
+    # is no track to hash, and that absence is exactly what makes this Concept.
+    decl = ROOT / "viz/scenes/concept/bench_fixture_concept.json"
     decl.parent.mkdir(parents=True, exist_ok=True)
     doc = {
         "lane": "B",

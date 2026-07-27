@@ -18,7 +18,7 @@ films fails twice over:
      would mean inventing geometry the plant does not contain.
 
 So the contrast ships as a chart, drawn from the same committed tracks the film
-is drawn from. Lane A, and Lane A may carry engineering numbers.
+is drawn from. Sim Replay, and Sim Replay may carry engineering numbers.
 
     ~/projects/overboard/.venv/bin/python viz/src/bench_plot.py
 """
@@ -53,7 +53,7 @@ def ratio_str(fit: dict) -> str:
 
 
 def _load(name: str) -> tuple[np.ndarray, np.ndarray, dict]:
-    npz = np.load(ROOT / f"viz/scenes/lane_a/{name}.otrk.npz", allow_pickle=False)
+    npz = np.load(ROOT / f"viz/scenes/replay/{name}.otrk.npz", allow_pickle=False)
     m = json.loads(str(npz["manifest"]))
     return npz["t"], npz["ch/shaft_rad_s"], m
 
@@ -128,7 +128,7 @@ def main() -> int:
              f"   ·   slope ratio {ratio:.1f}×",
              color=INK_MID, fontsize=9.2)
     fig.text(0.012, 0.022,
-             f"Lane A · replay of {m_l['source']['model_file']} · "
+             f"Sim Replay · replay of {m_l['source']['model_file']} · "
              f"{m_l['source']['commanded_current_a']:.0f} A held · "
              f"profile {m_l['source']['imperfection_profile']} · "
              f"rates are the sensed channel, as fitted",

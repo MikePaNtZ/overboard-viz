@@ -48,11 +48,11 @@ def stamp(im: Image.Image, text: str = "SIMULATION", opacity: float = 0.62,
 
     TWO DIFFERENT JOBS, KEPT VISUALLY DISTINCT ON PURPOSE
     -----------------------------------------------------
-    The default — amber, letterspaced, lower-LEFT — is the **Lane B
-    signature**: a disclosure that the footage is authored. Lane A carries no
+    The default — amber, letterspaced, lower-LEFT — is the **Concept
+    signature**: a disclosure that the footage is authored. Sim Replay carries no
     signature at all, by construction.
 
-    But a Lane A clip may still need a **factual label**, and slow motion is
+    But a Sim Replay clip may still need a **factual label**, and slow motion is
     the case that forces it: a 66.7x clip has to say so on the frame. That is
     not a disclosure of authorship and must not be mistaken for one, or the
     lanes stop meaning anything to a viewer. So it is deliberately styled
@@ -83,8 +83,8 @@ def main() -> int:
     ap.add_argument("frames", type=Path, help="directory of frame_*.png")
     ap.add_argument("--text", default="SIMULATION")
     ap.add_argument("--label", action="store_true",
-                    help="factual Lane A label (off-white, lower-right) rather "
-                         "than the Lane B signature")
+                    help="factual Sim Replay label (off-white, lower-right) rather "
+                         "than the Concept signature")
     args = ap.parse_args()
 
     pngs = sorted(args.frames.glob("*.png"))
