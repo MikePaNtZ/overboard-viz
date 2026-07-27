@@ -336,3 +336,88 @@ def desk_legs(parent, desk_pos, desk_size, floor_z: float):
                     (x0, y0 + sy - inset, z0 - sz - 0.055), m, parent,
                     name="apron_front"))
     return out
+
+
+def gclamp(parent, desk_thick: float, grip_z: float, name: str = "gclamp"):
+    """A G-clamp, built at the parent's local origin, opening along +X.
+
+    Local frame: z = 0 is the top of the work being clamped, the throat reaches
+    in from -X, and the screw comes up from below. The CALLER positions and
+    rotates an empty — which matters, because a G-clamp can only reach a free
+    EDGE. Placing one in the middle of a desktop puts its lower jaw inside the
+    desk, which is exactly the mistake the first version of this concept made:
+    two clamps floating 70 mm inboard with nothing under them to grip.
+
+    Modelled rather than sourced. Mike asked whether a clamp model could be
+    bought in; I looked and did not take one. The CC0 libraries this project
+    already depends on (Poly Haven) are HDRIs, textures and architectural props,
+    with no workshop tooling. Every external asset has to land in MANIFEST.json
+    with a source, licence and sha256, and taking on that dependency to save
+    fifty lines of primitives is a bad trade for a part seen at this size.
+
+    C-frame, acme screw, swivel pad and tommy bar — enough silhouette to read as
+    a clamp at any framing we would use.
+    """
+    m_body = _mat(f"{name}_body", "steel", "alu_anodised")
+    m_screw = _mat(f"{name}_screw", "steel", "steel")
+    m_pad = _mat(f"{name}_pad", "black", "rubber")
+
+    reach = 0.052
+    throat = grip_z + desk_thick + 0.034
+    mid_z = (grip_z - desk_thick - 0.030) / 2.0
+    fw = 0.010
+    out = [
+        _box((0.011, fw, throat / 2.0), (-reach - 0.011, 0.0, mid_z), m_body,
+             parent, name=f"{name}_spine"),
+        _box((reach, fw, 0.009), (-reach + 0.010, 0.0, grip_z + 0.009), m_body,
+             parent, name=f"{name}_jaw_top"),
+        _box((reach, fw, 0.010), (-reach + 0.010, 0.0, -desk_thick - 0.010),
+             m_body, parent, name=f"{name}_jaw_bot"),
+        _box((0.013, fw * 0.85, 0.005), (0.0, 0.0, grip_z + 0.004), m_body,
+             parent, name=f"{name}_anvil"),
+    ]
+    zs = -desk_thick
+    out.append(_cyl(0.0062, 0.020, (0.0, 0.0, zs - 0.020), m_screw, parent,
+                    axis="z", verts=24, name=f"{name}_screw"))
+    out.append(_cyl(0.0115, 0.0035, (0.0, 0.0, zs - 0.0035), m_pad, parent,
+                    axis="z", verts=24, name=f"{name}_pad"))
+    out.append(_cyl(0.0035, 0.030, (0.0, 0.0, zs - 0.038), m_screw, parent,
+                    axis="y", verts=16, name=f"{name}_bar"))
+    for sgn in (-1, 1):
+        out.append(_cyl(0.0055, 0.0035, (0.0, sgn * 0.030, zs - 0.038), m_screw,
+                        parent, axis="y", verts=16, name=f"{name}_barend{sgn}"))
+    return out
+
+
+def angle_bracket(parent, mount_y: float, riser_x, riser_z, foot_x, foot_y,
+                  thick: float = 0.005):
+    """An L-section running along X: horizontal foot on the desk, vertical riser.
+
+    This is the concept the owner asked for, and it is the shape that satisfies
+    both constraints at once. The riser stays a panel in the X-Z plane, thin in
+    Y, so the motor's mounting face and its Y hinge axis are untouched — the
+    disc still turns in the plane the board pitches in, which is what keeps the
+    later arm-and-mass upgrade a real inverted pendulum instead of a turntable.
+
+    What changes is only that the panel now has a foot to be clamped by, instead
+    of balancing on its bottom edge.
+    """
+    m = _mat("bp_bracket", "alu", "alu_anodised")
+    out = [
+        _box(((riser_x[1] - riser_x[0]) / 2, thick / 2,
+              (riser_z[1] - riser_z[0]) / 2),
+             ((riser_x[0] + riser_x[1]) / 2, mount_y,
+              (riser_z[0] + riser_z[1]) / 2), m, parent, name="riser"),
+        _box(((foot_x[1] - foot_x[0]) / 2, (foot_y[1] - foot_y[0]) / 2, thick / 2),
+             ((foot_x[0] + foot_x[1]) / 2, (foot_y[0] + foot_y[1]) / 2,
+              thick / 2), m, parent, name="foot"),
+    ]
+    # Triangular gussets, approximated as thin plates. The stand's stiffness
+    # requirement (first resonance above 50 Hz) is the reason a real one would
+    # have them, so they belong in a concept that is arguing for this shape.
+    for gx in (foot_x[0] + 0.030, foot_x[1] - 0.045):
+        out.append(_box((0.028, thick / 2, 0.028),
+                        (gx, mount_y + thick, 0.030), m, parent,
+                        name=f"gusset_{gx:.3f}",
+                        rot=None))
+    return out
