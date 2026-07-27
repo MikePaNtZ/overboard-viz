@@ -35,6 +35,7 @@ where each mesh sits on its body, and Blender's parenting does the rest.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -77,7 +78,7 @@ def _bike_trail(length: float = 400.0, trail_w: float = 3.0,
     plane and the board would visibly ignore any relief added here.
     """
     def strip(name, y_centre, width, tex, uv_m, z=0.0, tnt=tint):
-        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y_centre, z))
+        bpy.ops.mesh.primitive_preplaydd(size=1, location=(0, y_centre, z))
         o = bpy.context.object
         o.name = name
         o.scale = (length, width, 1)
@@ -104,7 +105,7 @@ def _outdoor(size: float = 400.0, tint: float = 0.55):
     chosen for having no skyline, landmarks, benches or people: depicting an
     identifiable place asserts the board was taken there.
     """
-    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
     ground = bpy.context.object
     ground.name = "ground"
     ground.data.materials.append(
@@ -125,7 +126,7 @@ def _floor(size: float = 200.0, tint: float = 0.42):
     plane does; scaling one without the other is how the texture ends up
     stretched into invisible smears.
     """
-    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
     floor = bpy.context.object
     floor.name = "floor"
     floor.data.materials.append(
@@ -201,6 +202,239 @@ def _rig(track, bindings):
         obj.modifiers.new("smooth", "EDGE_SPLIT").split_angle = math.radians(40)
 
     return empties
+
+
+# Finishes for the bench rig. Keyed by geom name because this plant is made of
+# primitives rather than named mesh materials, so there is nothing else to key
+# on. Appearance only — every dimension comes from the exported geom table, and
+# nothing here may change a size, a position or an axis.
+BENCH_FINISH = {
+    # 6061 aluminium, machined and anodised amber. The one part whose inertia
+    # is *known* (weighed and measured), so it is also the one the eye should
+    # land on first.
+    #
+    # Metallic is held well below a physical anodised-aluminium value on
+    # purpose. A fully metallic surface has no diffuse colour of its own — it
+    # shows only what is around it — and the garage HDRI is a dim room, so at
+    # metallic 0.9 the amber disappeared and the disc rendered near-black. This
+    # is the "sRGB vs linear" trap's cousin: the material was *correct* and the
+    # image was wrong. Keep enough diffuse for the brand amber to survive.
+    "flywheel":  dict(roughness=0.30, metallic=0.45, coat=0.10),
+    "rotor_can": dict(roughness=0.38, metallic=0.45, coat=0.00),
+    "stator":    dict(roughness=0.42, metallic=0.40, coat=0.00),
+    "hub":       dict(roughness=0.34, metallic=0.40, coat=0.00),
+    "plate":     dict(roughness=0.38, metallic=0.70, coat=0.00),
+    # Painted-on index mark. Matte, because in hardware it is tape or paint —
+    # if it reads as metal it looks like a machined feature with mass, and the
+    # MJCF is explicit that it has none.
+    "index":     dict(roughness=0.88, metallic=0.00, coat=0.00),
+    # The bench. A visual liberty is taken on its FINISH — the MJCF gives it a
+    # debug checker, which is a viewer aid, not a claim about a real desk — but
+    # not on its size or position, which come from the model like everything
+    # else. This is the same latitude the garage floor already takes.
+    "desk":      dict(roughness=0.62, metallic=0.05, coat=0.00),
+}
+_BENCH_DEFAULT_FINISH = dict(roughness=0.45, metallic=0.30, coat=0.00)
+
+# Appearance-only colour overrides, for geoms whose MJCF material is a viewer
+# aid rather than a claim about the object. `grid_mat` is a procedural checker
+# used to read motion in MuJoCo's own viewer; it carries no rgba, so the geom
+# arrives white and the bench renders as a featureless white slab that pulls
+# the eye straight off the rig. A plain dark benchtop is the honest reading of
+# "a desk". Sizes and positions are never overridden — only colour.
+BENCH_RGBA_OVERRIDE = {
+    "desk": [0.268, 0.230, 0.190, 1.0],
+    "plate": [0.560, 0.575, 0.590, 1.0],
+}
+
+# Geoms the MJCF models as solids but which are surface markings in hardware.
+#
+# `index` is the stripe that makes shaft rotation legible — the reason it
+# exists at all is so a render or a phone video can be checked against reported
+# ERPM. The model gives it the SAME y-extent as the flywheel (both span
+# 0.040–0.052), i.e. buried inside the disc and exactly coplanar with both
+# faces. MuJoCo does not care: it is massless with contype=0, so this costs the
+# physics nothing and the header is explicit that in hardware it is "paint or a
+# strip of tape". A renderer very much does care — coplanar faces z-fight, and
+# across 300 frames that flickers.
+#
+# So it is rendered as what it physically is: a decal of tape thickness sitting
+# ON the named geom's outward face. This is the one place the render departs
+# from the model's geometry, it is declared in the render manifest, and it
+# moves a massless marker by under a millimetre. Nothing load-bearing moves.
+BENCH_DECAL = {
+    "index": dict(on_face_of="flywheel", axis=1, thickness_m=0.0008),
+}
+
+
+def _bench_detail(manifest, empties):
+    """Swap the plain MJCF primitives for recognisable hardware.
+
+    Returns the set of geom names that `bench_parts` has taken over, so the
+    generic builder skips them rather than drawing a bare cylinder inside a
+    detailed one. Dimensions still come from the model — see bench_parts.
+    """
+    import bench_parts as bp
+
+    by = {g["name"]: g for g in manifest["geoms"]}
+    rotor = empties.get("rotor")
+    world = empties.get("world")
+    taken = set()
+
+    if rotor and "rotor_can" in by:
+        g = by["rotor_can"]
+        bp.outrunner_can(rotor, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("rotor_can")
+    if rotor and "flywheel" in by:
+        g = by["flywheel"]
+        bp.flywheel(rotor, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("flywheel")
+    if world and "stator" in by:
+        g = by["stator"]
+        bp.stator_half(world, g["size"][0], g["size"][1], g["pos"][1])
+        taken.add("stator")
+    if world and "plate" in by:
+        g = by["plate"]
+        bp.plate_detail(world, g["size"], g["pos"])
+    if world and "desk" in by and "plate" in by:
+        d, p = by["desk"], by["plate"]
+        desk_top = d["pos"][2] + d["size"][2]
+        bp.clamp(world, p["pos"][0], p["pos"][1], desk_top, 2.0 * d["size"][2])
+        bp.controller(world, d["pos"][0] + 0.10, d["pos"][1] + 0.115, desk_top)
+        bp.desk_legs(world, d["pos"], d["size"], desk_top - bp.DESK_HEIGHT_M)
+    return taken
+
+
+def _bench_rig(manifest, detail: bool = False):
+    """Build the bench rig from the geom table the exporter read off the MJCF.
+
+    Nothing here is transcribed by hand. Sizes, offsets and orientations all
+    come from the compiled model, so if Mechanical changes `bench_rig.xml` the
+    next export moves the render with it — and a render that disagrees with the
+    plant cannot be produced by editing this file alone.
+
+    MuJoCo → Blender needs no axis conversion: both are right-handed, +Z up,
+    with scalar-first (w,x,y,z) quaternions. Do not add a swap.
+    """
+    empties = {}
+    for body in set([g["body"] for g in manifest["geoms"]]) | set(manifest["bodies"]):
+        e = bpy.data.objects.new(f"body_{body}", None)
+        bpy.context.collection.objects.link(e)
+        e.rotation_mode = "QUATERNION"
+        empties[body] = e
+
+    by_name = {g["name"]: g for g in manifest["geoms"]}
+    decals = []
+    taken = _bench_detail(manifest, empties) if detail else set()
+
+    for g in manifest["geoms"]:
+        if g["name"] in taken:
+            continue
+        size, name = list(g["size"]), g["name"]
+        pos = list(g["pos"])
+
+        # Lift surface markings onto the face they are painted on — see BENCH_DECAL.
+        if name in BENCH_DECAL:
+            d = BENCH_DECAL[name]
+            host = by_name.get(d["on_face_of"])
+            if host is None:
+                # The surface this is painted on is not in the model, so the
+                # marking cannot be either. This is not hypothetical: the
+                # identification's bare-rotor variant strips the `flywheel`
+                # geom but not the `index` mark that sits on it, leaving a
+                # white bar rotating in mid-air 52 mm off the shaft. It costs
+                # the physics nothing (the mark is massless, contype=0) so the
+                # fit is unaffected — but rendered, it reads as a broken scene.
+                # Dropping it is the only honest option available here; adding
+                # a marker somewhere else would be inventing geometry.
+                print(f"  dropped decal '{name}': host geom "
+                      f"'{d['on_face_of']}' is absent from this model")
+                continue
+            if host:
+                ax = d["axis"]
+                # The host cylinder's half-length is size[1]; its outward face
+                # sits that far from its own centre along the rotation axis.
+                face = host["pos"][ax] + host["size"][1]
+                size[ax if ax < len(size) else 1] = d["thickness_m"]
+                pos[ax] = face + d["thickness_m"]
+                decals.append(name)
+        if g["type"] == "box":
+            bpy.ops.mesh.primitive_cube_add(size=2.0)
+            obj = bpy.context.object
+            obj.scale = Vector(size[:3])          # MuJoCo box size = half-extents
+        elif g["type"] == "cylinder":
+            # MuJoCo: size = (radius, half-length), axis along the geom's local
+            # +Z — the same convention Blender's primitive uses, which is why
+            # the euler="90 0 0" in the MJCF arrives already baked into quat.
+            bpy.ops.mesh.primitive_cylinder_add(radius=size[0], depth=2.0 * size[1],
+                                                vertices=96)
+            obj = bpy.context.object
+        elif g["type"] == "sphere":
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=size[0], segments=48, ring_count=24)
+            obj = bpy.context.object
+        else:
+            continue
+        obj.name = name
+
+        # Parent first, then set the local transform — assigning .parent in
+        # Python leaves matrix_parent_inverse identity, so these are read
+        # directly in the parent body's frame, which is what the table holds.
+        obj.parent = empties[g["body"]]
+        obj.location = Vector(pos)
+        obj.rotation_mode = "QUATERNION"
+        obj.rotation_quaternion = Quaternion(g["quat"])
+
+        obj.data.materials.append(bs._principled(
+            f"bench_{name}", BENCH_RGBA_OVERRIDE.get(name, g["rgba_srgb"]),
+            BENCH_FINISH.get(name, _BENCH_DEFAULT_FINISH)))
+
+        for p in obj.data.polygons:
+            p.use_smooth = True
+        # EDGE_SPLIT alongside use_smooth, always. Smooth-shading a flat end cap
+        # without it turned the hub disc into a chrome eyeball once already, and
+        # this scene is nothing but end caps.
+        obj.modifiers.new("smooth", "EDGE_SPLIT").split_angle = math.radians(35)
+
+    return empties
+
+
+def _bench_camera(lens: float, dist: float, azim: float, elev: float,
+                  target=(0.055, 0.02, 0.118), fstop: float = 3.2):
+    """Locked off, and it has to be.
+
+    The rig does not translate — one hinge, and the only motion in the frame is
+    the disc turning. A moving camera here would be pure authorship: it would
+    add apparent motion that the plant does not contain, on a clip whose entire
+    claim is that every frame is a measurement.
+    """
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    cam.data.lens = lens
+    bpy.context.collection.objects.link(cam)
+    bpy.context.scene.camera = cam
+
+    a, e = math.radians(azim), math.radians(elev)
+    t = Vector(target)
+
+    # `_kicker` aims itself at this by name. The tracking camera creates one as
+    # a side effect of following the board; a locked-off camera has to make it
+    # explicitly, or the rim light points at the world origin instead of the rig.
+    focus = bpy.data.objects.new("focus_target", None)
+    bpy.context.collection.objects.link(focus)
+    focus.location = t
+
+    cam.location = t + Vector((dist * math.cos(e) * math.cos(a),
+                               dist * math.cos(e) * math.sin(a),
+                               dist * math.sin(e)))
+    d = (t - cam.location).normalized()
+    cam.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
+
+    # A 75 mm disc half a metre away: depth of field is a real effect at this
+    # scale, not a stylistic add. Focused on the disc face so the desk behind
+    # falls away and the eye is not asked to read the whole bench at once.
+    cam.data.dof.use_dof = True
+    cam.data.dof.focus_distance = (t - cam.location).length
+    cam.data.dof.aperture_fstop = fstop
+    return cam
 
 
 def _linear_keys() -> None:
@@ -306,6 +540,61 @@ def _tracking_camera(track, n, lens: float, lag: float, side: float, height: flo
     return cam
 
 
+def _write_render_manifest(args, track_manifest, n, fps) -> Path:
+    """Emit the per-render manifest: lane, and the hash of the track it replays.
+
+    Required of every render by the two-lane rule. The hash is the part that
+    does the work — it is what lets someone who is not us check a Sim Replay claim
+    instead of taking it on trust. Without it, "reproducible from the committed
+    track" is an assertion; with it, anyone can hash `viz/scenes/replay/*.otrk.npz`
+    and see whether this is the run they were shown.
+
+    The lane is read from the track, not chosen here, so a render cannot
+    quietly upgrade itself to Sim Replay by passing a flag.
+    """
+    lane = track_manifest.get("lane")
+    if lane not in ("A", "B"):
+        raise SystemExit(
+            f"track {args.track.name} declares lane={lane!r}; expected 'A' or 'B'. "
+            f"Every track must declare its lane — refusing to render an "
+            f"unlabelled artefact.")
+
+    ts = track_manifest["time"]
+    doc = {
+        "lane": lane,
+        "track": {
+            "file": str(args.track.relative_to(ROOT)) if args.track.is_relative_to(ROOT)
+                    else str(args.track),
+            "sha256": hashlib.sha256(args.track.read_bytes()).hexdigest(),
+            "scenario": track_manifest["source"]["scenario"],
+            "model_file": track_manifest["source"].get("model_file"),
+            "model_sha256": track_manifest["source"].get("model_sha256"),
+        },
+        "render": {
+            "scene": args.scene, "engine": args.engine, "samples": args.samples,
+            "resolution": [args.width, args.height], "lens": args.lens,
+            "exposure_ev": args.exposure, "hdri_rot_deg": args.hdri_rot,
+            "hdri_strength": args.hdri_strength, "kicker": args.kicker,
+            "n_frames": n, "playback_fps": fps,
+        },
+        # Carried up from the track so the fact that this is slow motion cannot
+        # be lost by someone reading only the render manifest.
+        "time_scale": ts.get("time_scale", 1.0),
+        "playback_note": ts.get("playback_note", "real time"),
+        # Sim Replay carries no signature by construction: it is a replay, and the
+        # mark exists to disclose authorship, of which there is none here.
+        "signature": None if lane == "A" else "required",
+        "attribution": "Board meshes: Openwheel (MIT). HDRI/textures: Poly Haven (CC0). "
+                       "See viz/assets/MANIFEST.json.",
+    }
+    out = args.out.with_suffix(".render.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=2) + "\n")
+    print(f"lane {lane} · track sha256 {doc['track']['sha256'][:12]}… · "
+          f"{doc['playback_note']}")
+    return out
+
+
 def main() -> int:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
@@ -329,7 +618,17 @@ def main() -> int:
     ap.add_argument("--static", action="store_true",
                     help="locked-off camera aimed at the route centre")
     ap.add_argument("--scene", default="garage",
-                    choices=["garage", "outdoor", "waterfront"])
+                    choices=["garage", "outdoor", "waterfront", "bench"])
+    ap.add_argument("--cam-dist", type=float, default=0.62,
+                    help="bench scene: camera distance from the disc, metres")
+    ap.add_argument("--cam-azim", type=float, default=58.0,
+                    help="bench scene: camera azimuth, degrees about +Z")
+    ap.add_argument("--cam-elev", type=float, default=17.0,
+                    help="bench scene: camera elevation, degrees")
+    ap.add_argument("--plain", action="store_true",
+                    help="bench scene: raw MJCF primitives, no dressed hardware")
+    ap.add_argument("--fstop", type=float, default=3.2,
+                    help="bench scene: aperture; lower is shallower focus")
     ap.add_argument("--cam-back", type=float, default=0.0,
                     help="park the camera this far behind the start (use with --lag 0)")
     ap.add_argument("--release-at", type=float, default=0.0,
@@ -354,7 +653,28 @@ def main() -> int:
 
     bs._clear_scene()
     _linear_keys()
-    if args.scene == "waterfront":
+    if args.scene == "bench":
+        ts = manifest["time"]
+        print(f"  bench rig: 1 frame = {ts['frames_per_timestep']} timestep "
+              f"({ts['sim_dt_s']*1e3:.2f} ms) → {ts['playback_note']}")
+        bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
+        if not args.plain:
+            import bench_parts as _bp
+            _floor(size=60.0, tint=args.floor_tint).location.z = (
+                -_bp.DESK_HEIGHT_M)
+        empties = _bench_rig(manifest, detail=not args.plain)
+        # Only the tracked bodies get keys. `world` carries the desk, plate and
+        # stator — it is static by construction (they are ground in the MJCF),
+        # and its empty stays at identity so those geoms sit where the model
+        # puts them. Keyframing it would be inventing motion for the bench.
+        _animate({b: empties[b] for b in track["bodies"]}, track, n)
+        _bench_camera(args.lens, args.cam_dist, args.cam_azim, args.cam_elev,
+                      fstop=args.fstop)
+        # Small, close and warm. The garage kicker is sized and placed for a
+        # board on a floor; at bench scale it is both too far away and far too
+        # strong, and it washes the disc face flat.
+        bs._kicker(args.kicker, warm=True, loc=(0.45, 0.55, 0.55), size=0.5)
+    elif args.scene == "waterfront":
         bs._world(WATERFRONT_HDRI, args.hdri_strength, args.hdri_rot)
         _bike_trail(tint=args.floor_tint)
     elif args.scene == "outdoor":
@@ -363,15 +683,19 @@ def main() -> int:
     else:
         bs._world(bs.HDRI, args.hdri_strength, args.hdri_rot)
         _floor(tint=args.floor_tint)
-    empties = _rig(track, manifest["bindings"])
-    _animate(empties, track, n)
-    _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset,
-                     release_frame=int(args.release_at * fps) if args.release_at else 0,
-                     back=args.cam_back, static=args.static,
-                     aim_up=args.aim_up)
+
+    if args.scene != "bench":
+        empties = _rig(track, manifest["bindings"])
+        _animate(empties, track, n)
+        _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset,
+                         release_frame=int(args.release_at * fps) if args.release_at else 0,
+                         back=args.cam_back, static=args.static,
+                         aim_up=args.aim_up)
     # The waterfront key is a low sun roughly behind the subject, so the rim
     # comes from that side and is warm; the garage key is overhead and cool.
-    if args.scene == "waterfront":
+    if args.scene == "bench":
+        pass
+    elif args.scene == "waterfront":
         # Far back and physically large. Close in, an area light lays a bright
         # elliptical pool on the paving that reads as a film-set spotlight on
         # a beach at dusk. Distance flattens the falloff across the ground so
@@ -423,6 +747,7 @@ def main() -> int:
                 setattr(scene.eevee, attr, True)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
+    _write_render_manifest(args, manifest, n, fps)
     if args.frame:
         scene.frame_set(args.frame)
         scene.render.filepath = str(args.out.with_suffix("")) + f"_f{args.frame:04d}"

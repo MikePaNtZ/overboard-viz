@@ -1,0 +1,28 @@
+{
+  "lane": "B",
+  "kind": "authored concept",
+  "track": null,
+  "reproduces_a_run": false,
+  "may_carry_engineering_numbers": false,
+  "copy_tense": "future/subjunctive \u2014 what it would look like",
+  "signature": "required, burned into the frame",
+  "subject": "alternative bench-rig fixture: L-section clamped to the desk",
+  "constraints_respected": [
+    "overhang preserved \u2014 the disc still swings clear past the desk edge",
+    "hinge axis unchanged (Y) \u2014 the disc still turns in the board's pitch plane, so the arm-and-mass upgrade survives"
+  ],
+  "explicitly_not_done": [
+    "rotating the shaft to vertical \u2014 that makes it a turntable and forfeits the inverted-pendulum upgrade"
+  ],
+  "render": {
+    "engine": "EEVEE",
+    "samples": 56,
+    "resolution": [
+      1400,
+      788
+    ],
+    "lens": 38.0,
+    "exposure_ev": -0.9
+  },
+  "attribution": "HDRI/textures: Poly Haven (CC0). See viz/assets/MANIFEST.json."
+}
