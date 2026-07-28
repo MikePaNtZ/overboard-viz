@@ -546,6 +546,14 @@ def _framing_report(cam, empties, bodies, n: int, aspect: str, samples: int = 48
         if fy0 < SAFE_BOTTOM or fy1 > 1.0 - SAFE_TOP:
             in_ui += 1
 
+    if lo[0] > hi[0]:
+        # Every sample was behind the lens. Report nothing rather than the
+        # sentinels, which would read as a real measurement in the manifest.
+        print(f"framing ({aspect}): subject is behind the camera on every "
+              f"sampled frame")
+        scene.frame_set(1)
+        return None
+
     rep = {
         "sampled_frames": len(frames),
         "subject_x": [round(lo[0], 4), round(hi[0], 4)],
