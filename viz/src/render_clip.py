@@ -78,7 +78,7 @@ def _bike_trail(length: float = 400.0, trail_w: float = 3.0,
     plane and the board would visibly ignore any relief added here.
     """
     def strip(name, y_centre, width, tex, uv_m, z=0.0, tnt=tint):
-        bpy.ops.mesh.primitive_preplaydd(size=1, location=(0, y_centre, z))
+        bpy.ops.mesh.primitive_plane_add(size=1, location=(0, y_centre, z))
         o = bpy.context.object
         o.name = name
         o.scale = (length, width, 1)
@@ -105,7 +105,7 @@ def _outdoor(size: float = 400.0, tint: float = 0.55):
     chosen for having no skyline, landmarks, benches or people: depicting an
     identifiable place asserts the board was taken there.
     """
-    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
     ground = bpy.context.object
     ground.name = "ground"
     ground.data.materials.append(
@@ -126,7 +126,7 @@ def _floor(size: float = 200.0, tint: float = 0.42):
     plane does; scaling one without the other is how the texture ends up
     stretched into invisible smears.
     """
-    bpy.ops.mesh.primitive_preplaydd(size=size, location=(0, 0, 0))
+    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
     floor = bpy.context.object
     floor.name = "floor"
     floor.data.materials.append(
