@@ -1,0 +1,30 @@
+name: tests
+
+# The repo's stated gate is "green CI", and until now there was no CI to be
+# green. This is the smallest thing that makes the sentence true: the delivery
+# tests need Pillow and nothing else — no Blender, no GPU, no assets — so they
+# run in seconds on a hosted runner.
+#
+# What it does NOT cover, named so nobody assumes otherwise: nothing here
+# imports `bpy`, so a broken render path still passes. That gap is real and it
+# has already cost this repo once — a rename sweep turned
+# `primitive_plane_add` into `primitive_preplaydd` and every scene with a
+# ground plane raised AttributeError with nothing to catch it. Closing it
+# properly means a headless Blender smoke render in CI, which is a bigger job
+# than this file.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pillow
+      - run: python viz/tests/test_delivery.py
