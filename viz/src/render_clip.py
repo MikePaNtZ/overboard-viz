@@ -559,8 +559,13 @@ def _framing_report(cam, empties, bodies, n: int, aspect: str, samples: int = 48
         "subject_x": [round(lo[0], 4), round(hi[0], 4)],
         "subject_y": [round(lo[1], 4), round(hi[1], 4)],
         "frames_partly_off_frame": off_frame,
-        "frames_touching_ui_bands": in_ui,
-        "safe_band_y": [SAFE_BOTTOM, round(1.0 - SAFE_TOP, 4)],
+        # Null on a landscape cut rather than zero or a count. There are no
+        # interface bands over a 16:9 player, so a number here would invite
+        # someone to compare it with the vertical one and conclude the
+        # landscape framing is worse — when the question does not apply.
+        "frames_touching_ui_bands": in_ui if aspect != REFERENCE_ASPECT else None,
+        "safe_band_y": ([SAFE_BOTTOM, round(1.0 - SAFE_TOP, 4)]
+                        if aspect != REFERENCE_ASPECT else None),
     }
     print(f"framing ({aspect}, {len(frames)} samples): "
           f"x {lo[0]:+.3f}..{hi[0]:+.3f}  y {lo[1]:+.3f}..{hi[1]:+.3f}")
