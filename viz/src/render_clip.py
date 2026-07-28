@@ -43,13 +43,42 @@ from pathlib import Path
 
 import bpy
 import numpy as np
+from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_scene as bs  # noqa: E402  — the V1.0 scene, reused wholesale
+from delivery import (  # noqa: E402  — shared with the stdlib-only stamp pass
+    ASPECTS, MARKS, REFERENCE_ASPECT, SAFE_BOTTOM, SAFE_TOP,
+    vertical_sensor_height)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
+
+
+def _fit_sensor(cam, aspect: str) -> None:
+    """Re-frame an existing camera for a vertical delivery, without re-shooting.
+
+    The 16:9 path returns immediately and touches nothing, so a landscape render
+    is bit-for-bit what it was before this function existed. The arithmetic — and
+    the reasoning for it — lives in `delivery.vertical_sensor_height`, where it
+    can be tested without launching Blender.
+
+    Two consequences, both real, and the second is the one that bites:
+
+      + The composition survives. Nothing is cut off the top or bottom, the
+        grade is untouched, and the subject's size relative to the *safe area*
+        is identical to its size in the 16:9 frame.
+      − Horizontally this is a genuine crop: the vertical frame spans 47% of the
+        landscape frame's width. A subject that drifts sideways in 16:9 has less
+        than half the room before it walks out of the vertical frame — which is
+        what `_framing_report` exists to catch before 500 frames are rendered
+        rather than after.
+    """
+    if aspect == REFERENCE_ASPECT:
+        return
+    cam.data.sensor_fit = "VERTICAL"
+    cam.data.sensor_height = vertical_sensor_height(cam.data.sensor_width)
 CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
 OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
 WATERFRONT_HDRI = ROOT / "viz/assets/hdri/the_sky_is_on_fire_4k.hdr"
@@ -462,6 +491,84 @@ def _animate(empties, track, n):
             e.keyframe_insert("rotation_quaternion", frame=i + 1)
 
 
+def _framing_report(cam, empties, bodies, n: int, aspect: str, samples: int = 48):
+    """Where the subject actually sits in frame, measured rather than assumed.
+
+    Projects the bounding box of every mesh hung off a *moving* body through the
+    camera, across the clip, and returns the extreme normalised image
+    coordinates. Static set dressing — floor, desk, verges — is excluded on
+    purpose: the question is where the board and its rider land, not where the
+    ground does.
+
+    This exists because the vertical frame spans well under half the landscape
+    frame's width, so a tracking shot that drifts harmlessly in 16:9 can walk
+    the subject off the side in 9:16. Finding that out costs one second here and
+    an entire re-render if it is discovered by watching the result.
+
+    Coordinates are Blender's: x and y in [0, 1] across the rendered image, y
+    measured from the BOTTOM. A subject is safe when its whole box sits inside
+    x in [0, 1] and y in [SAFE_BOTTOM, 1 - SAFE_TOP].
+    """
+    scene = bpy.context.scene
+    subject = [o for o in bpy.data.objects
+               if o.type == "MESH" and o.parent is not None
+               and o.parent in {empties[b] for b in bodies if b in empties}]
+    if not subject:
+        return None
+
+    step = max(1, n // samples)
+    frames = list(range(1, n + 1, step))
+    lo = [1e9, 1e9]
+    hi = [-1e9, -1e9]
+    off_frame = in_ui = 0
+    dg = bpy.context.evaluated_depsgraph_get()
+
+    for f in frames:
+        scene.frame_set(f)
+        dg.update()
+        fx0, fx1, fy0, fy1 = 1e9, -1e9, 1e9, -1e9
+        for o in subject:
+            ev = o.evaluated_get(dg)
+            m = ev.matrix_world
+            for c in ev.bound_box:
+                u = world_to_camera_view(scene, cam, m @ Vector(c))
+                if u.z <= 0:          # behind the lens; not in this picture
+                    continue
+                fx0, fx1 = min(fx0, u.x), max(fx1, u.x)
+                fy0, fy1 = min(fy0, u.y), max(fy1, u.y)
+        if fx0 > fx1:
+            continue
+        lo = [min(lo[0], fx0), min(lo[1], fy0)]
+        hi = [max(hi[0], fx1), max(hi[1], fy1)]
+        if fx0 < 0.0 or fx1 > 1.0 or fy0 < 0.0 or fy1 > 1.0:
+            off_frame += 1
+        if fy0 < SAFE_BOTTOM or fy1 > 1.0 - SAFE_TOP:
+            in_ui += 1
+
+    rep = {
+        "sampled_frames": len(frames),
+        "subject_x": [round(lo[0], 4), round(hi[0], 4)],
+        "subject_y": [round(lo[1], 4), round(hi[1], 4)],
+        "frames_partly_off_frame": off_frame,
+        "frames_touching_ui_bands": in_ui,
+        "safe_band_y": [SAFE_BOTTOM, round(1.0 - SAFE_TOP, 4)],
+    }
+    print(f"framing ({aspect}, {len(frames)} samples): "
+          f"x {lo[0]:+.3f}..{hi[0]:+.3f}  y {lo[1]:+.3f}..{hi[1]:+.3f}")
+    if off_frame:
+        print(f"  ⚠ subject leaves the frame on {off_frame}/{len(frames)} "
+              f"sampled frames")
+    if aspect != REFERENCE_ASPECT and in_ui:
+        # Only a warning. Legs and a shadow crossing into the caption band is
+        # normal and fine; a head or a HUD figure doing it is not. The number is
+        # here so a human decides, and so the decision is recorded in the
+        # manifest either way.
+        print(f"  ⚠ subject enters the platform-UI bands on {in_ui}/"
+              f"{len(frames)} sampled frames "
+              f"(safe y {SAFE_BOTTOM}..{1.0 - SAFE_TOP})")
+    scene.frame_set(1)
+    return rep
+
 
 def _tracking_camera(track, n, lens: float, lag: float, side: float, height: float,
                      release_frame: int = 0, back: float = 0.0,
@@ -540,28 +647,63 @@ def _tracking_camera(track, n, lens: float, lag: float, side: float, height: flo
     return cam
 
 
-def _write_render_manifest(args, track_manifest, n, fps) -> Path:
-    """Emit the per-render manifest: lane, and the hash of the track it replays.
+def _category(track_manifest, track_name: str) -> str:
+    """Resolve the track's category. Definitions are NOT restated here.
 
-    Required of every render by the two-lane rule. The hash is the part that
-    does the work — it is what lets someone who is not us check a Sim Replay claim
-    instead of taking it on trust. Without it, "reproducible from the committed
-    track" is an assertion; with it, anyone can hash `viz/scenes/replay/*.otrk.npz`
-    and see whether this is the run they were shown.
+        📖 https://app.notion.com/p/3aa472a5fb6981ebaaa7cf2e996f1e8b
 
-    The lane is read from the track, not chosen here, so a render cannot
-    quietly upgrade itself to Sim Replay by passing a flag.
+    Read off the track, never chosen at the command line, so a render cannot
+    promote itself by passing a flag.
+
+    Resolution order, most explicit first:
+
+      1. `category`, if the exporter wrote one.
+      2. the superseded `lane` field. `B` maps straight across; `A` does not,
+         because it collapsed two things the current vocabulary keeps apart —
+         which source the recorded data came from. So `A` defers to (3).
+      3. `source.kind`, which every exported track carries. This is also the
+         hook the operational rule asks for: when real telemetry arrives,
+         `kind: "hardware"` produces a Hardware Replay and a `HARDWARE` mark
+         with no code change here at all.
+
+    Anything unrecognised is refused. An unlabelled artefact is the one output
+    this repo may never produce.
     """
-    lane = track_manifest.get("lane")
-    if lane not in ("A", "B"):
-        raise SystemExit(
-            f"track {args.track.name} declares lane={lane!r}; expected 'A' or 'B'. "
-            f"Every track must declare its lane — refusing to render an "
-            f"unlabelled artefact.")
+    by_kind = {"sim": "Sim Replay", "hardware": "Hardware Replay",
+               "camera": "Footage"}
+    declared = track_manifest.get("category")
+    if declared in MARKS:
+        return declared
+    if track_manifest.get("lane") == "B":
+        return "Concept"
+    kind = (track_manifest.get("source") or {}).get("kind")
+    if kind in by_kind:
+        return by_kind[kind]
+    raise SystemExit(
+        f"track {track_name} declares category={declared!r}, lane="
+        f"{track_manifest.get('lane')!r}, source.kind={kind!r} — none of which "
+        f"resolves to a category. Refusing to render an unlabelled artefact.")
+
+
+def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
+    """Emit the per-render manifest: category, mark, and the track's hash.
+
+    Required of every render. The hash is the part that does the work — it is
+    what lets someone who is not us check a Sim Replay claim instead of taking
+    it on trust. Without it, "reproducible from the committed track" is an
+    assertion; with it, anyone can hash `viz/scenes/replay/*.otrk.npz` and see
+    whether this is the run they were shown.
+
+    `mark` is the text `stamp_frames.py` must burn in. Naming it here rather
+    than leaving it to whoever runs the stamp pass is what stops a vertical
+    cut going out unmarked because someone typed a different flag.
+    """
+    category = _category(track_manifest, args.track.name)
 
     ts = track_manifest["time"]
     doc = {
-        "lane": lane,
+        "category": category,
+        "mark": MARKS[category],
         "track": {
             "file": str(args.track.relative_to(ROOT)) if args.track.is_relative_to(ROOT)
                     else str(args.track),
@@ -576,22 +718,26 @@ def _write_render_manifest(args, track_manifest, n, fps) -> Path:
             "exposure_ev": args.exposure, "hdri_rot_deg": args.hdri_rot,
             "hdri_strength": args.hdri_strength, "kicker": args.kicker,
             "n_frames": n, "playback_fps": fps,
+            "aspect": args.aspect,
+            # Only meaningful on a vertical cut, but recorded either way so the
+            # two manifests of a pair diff cleanly.
+            "safe_area": {"top": SAFE_TOP, "bottom": SAFE_BOTTOM},
         },
+        # Measured, not asserted: where the board and rider actually landed in
+        # this frame. See _framing_report.
+        "framing": framing,
         # Carried up from the track so the fact that this is slow motion cannot
         # be lost by someone reading only the render manifest.
         "time_scale": ts.get("time_scale", 1.0),
         "playback_note": ts.get("playback_note", "real time"),
-        # Sim Replay carries no signature by construction: it is a replay, and the
-        # mark exists to disclose authorship, of which there is none here.
-        "signature": None if lane == "A" else "required",
         "attribution": "Board meshes: Openwheel (MIT). HDRI/textures: Poly Haven (CC0). "
                        "See viz/assets/MANIFEST.json.",
     }
     out = args.out.with_suffix(".render.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, indent=2) + "\n")
-    print(f"lane {lane} · track sha256 {doc['track']['sha256'][:12]}… · "
-          f"{doc['playback_note']}")
+    print(f"{category} · mark {MARKS[category] or 'none'} · track sha256 "
+          f"{doc['track']['sha256'][:12]}… · {doc['playback_note']}")
     return out
 
 
@@ -600,8 +746,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
     ap.add_argument("--samples", type=int, default=64)
-    ap.add_argument("--width", type=int, default=1920)
-    ap.add_argument("--height", type=int, default=1080)
+    ap.add_argument("--aspect", default=REFERENCE_ASPECT, choices=list(ASPECTS),
+                    help="delivery shape. 16:9 is the reference framing; 9:16 "
+                         "places that whole framing inside the vertical safe area")
+    ap.add_argument("--width", type=int, default=None,
+                    help="override the resolution implied by --aspect")
+    ap.add_argument("--height", type=int, default=None)
     ap.add_argument("--lens", type=float, default=50.0)
     ap.add_argument("--lag", type=float, default=0.92)
     ap.add_argument("--side", type=float, default=-1.62)
@@ -636,6 +786,8 @@ def main() -> int:
     ap.add_argument("--frame", type=int, default=0,
                     help="render this single frame only, for iteration")
     args = ap.parse_args(argv)
+    _w, _h = ASPECTS[args.aspect]
+    args.width, args.height = args.width or _w, args.height or _h
 
     npz = np.load(args.track, allow_pickle=False)
     manifest = json.loads(str(npz["manifest"]))
@@ -668,8 +820,8 @@ def main() -> int:
         # and its empty stays at identity so those geoms sit where the model
         # puts them. Keyframing it would be inventing motion for the bench.
         _animate({b: empties[b] for b in track["bodies"]}, track, n)
-        _bench_camera(args.lens, args.cam_dist, args.cam_azim, args.cam_elev,
-                      fstop=args.fstop)
+        cam = _bench_camera(args.lens, args.cam_dist, args.cam_azim, args.cam_elev,
+                            fstop=args.fstop)
         # Small, close and warm. The garage kicker is sized and placed for a
         # board on a floor; at bench scale it is both too far away and far too
         # strong, and it washes the disc face flat.
@@ -687,10 +839,13 @@ def main() -> int:
     if args.scene != "bench":
         empties = _rig(track, manifest["bindings"])
         _animate(empties, track, n)
-        _tracking_camera(track, n, args.lens, args.lag, args.side, args.height_offset,
-                         release_frame=int(args.release_at * fps) if args.release_at else 0,
-                         back=args.cam_back, static=args.static,
-                         aim_up=args.aim_up)
+        cam = _tracking_camera(track, n, args.lens, args.lag, args.side,
+                               args.height_offset,
+                               release_frame=int(args.release_at * fps) if args.release_at else 0,
+                               back=args.cam_back, static=args.static,
+                               aim_up=args.aim_up)
+    # Re-frame for a vertical delivery. A no-op at 16:9 — see _fit_sensor.
+    _fit_sensor(cam, args.aspect)
     # The waterfront key is a low sun roughly behind the subject, so the rim
     # comes from that side and is warm; the garage key is overhead and cool.
     if args.scene == "bench":
@@ -747,7 +902,9 @@ def main() -> int:
                 setattr(scene.eevee, attr, True)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    _write_render_manifest(args, manifest, n, fps)
+    # After the resolution and the sensor are set, or it measures the wrong frame.
+    framing = _framing_report(cam, empties, track["bodies"], n, args.aspect)
+    _write_render_manifest(args, manifest, n, fps, framing)
     if args.frame:
         scene.frame_set(args.frame)
         scene.render.filepath = str(args.out.with_suffix("")) + f"_f{args.frame:04d}"
