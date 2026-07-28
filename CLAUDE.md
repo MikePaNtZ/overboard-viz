@@ -230,6 +230,18 @@ Documented at length in the source and in `README.md`; summarised so they are no
 - **Never stamp frames while a render is still running.** The stamp pass once overtook the render
   and marked 659 of 730 frames, leaving a silent hole in a guarantee. Stamping twice is not
   idempotent.
+- **Stamp the vertical frames, not the landscape ones you then crop.** Both mark placements fall
+  outside the middle 31.6% a centre 9:16 crop keeps, so the obvious pipeline delivers a vertical
+  cut that looks *deliberately* unmarked. `stamp_frames.py` refuses; `viz/tests/test_delivery.py`
+  asserts it.
+- **Renders are not byte-reproducible — never diff them by hash.** EEVEE on Metal disagrees with
+  itself: the same frame from the same commit, rendered twice, differed in 32 of 2,073,600 pixels
+  by one 255th each. Pixel-diff with a threshold instead.
+- **A rename sweep that matches inside identifiers will silently delete code paths.** The
+  Lane A→Sim Replay migration replaced the substring `lane_a`, which lives inside
+  `bpy.ops.mesh.primitive_plane_add`; every scene that builds a ground plane raised
+  `AttributeError` and nobody noticed because the bench scene has no plane. Fixed on
+  `feat/content/vertical-9x16`.
 
 ## Open items (named, so they are not silently inherited)
 

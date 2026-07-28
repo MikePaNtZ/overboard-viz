@@ -107,6 +107,11 @@ so the next person does not rediscover them.
   eyeball. Every primitive gets an `EDGE_SPLIT` alongside `use_smooth`.
 - **First Cycles run compiles Metal kernels** and takes ~2 minutes regardless of resolution.
   Every run after that is seconds. Do not conclude the GPU is broken from a cold first render.
+- **Renders are not byte-reproducible, so never diff them by hash.** EEVEE on Metal disagrees with
+  *itself*: rendering the same frame twice from the same commit gave 32 differing pixels out of
+  2,073,600, each off by one 255th. Compare with a pixel diff and a threshold instead. Measured
+  2026-07-28 on the bench scene, frame 150, and worth knowing before you spend an afternoon
+  hunting for the change that "broke" a render.
 
 ## Reproducibility
 
