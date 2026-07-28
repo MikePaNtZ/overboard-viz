@@ -50,10 +50,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_scene as bs  # noqa: E402  — the V1.0 scene, reused wholesale
 from delivery import (  # noqa: E402  — shared with the stdlib-only stamp pass
     ASPECTS, MARKS, REFERENCE_ASPECT, SAFE_BOTTOM, SAFE_TOP,
-    vertical_sensor_height)
+    vertical_sensor_height, vertical_shift_y)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACK = ROOT / "viz/scenes/impulse.otrk.npz"
+CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
+OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
+WATERFRONT_HDRI = ROOT / "viz/assets/hdri/the_sky_is_on_fire_4k.hdr"
+GRASS = ROOT / "viz/assets/textures/aerial_grass_rock"
+ASPHALT = ROOT / "viz/assets/textures/asphalt_02"
 
 
 def _fit_sensor(cam, aspect: str) -> None:
@@ -79,11 +84,7 @@ def _fit_sensor(cam, aspect: str) -> None:
         return
     cam.data.sensor_fit = "VERTICAL"
     cam.data.sensor_height = vertical_sensor_height(cam.data.sensor_width)
-CONCRETE = ROOT / "viz/assets/textures/concrete_floor_worn_001"
-OUTDOOR_HDRI = ROOT / "viz/assets/hdri/approaching_storm_4k.hdr"
-WATERFRONT_HDRI = ROOT / "viz/assets/hdri/the_sky_is_on_fire_4k.hdr"
-GRASS = ROOT / "viz/assets/textures/aerial_grass_rock"
-ASPHALT = ROOT / "viz/assets/textures/asphalt_02"
+    cam.data.shift_y = vertical_shift_y()
 
 
 def _bike_trail(length: float = 400.0, trail_w: float = 3.0,

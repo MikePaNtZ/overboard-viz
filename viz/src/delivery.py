@@ -80,6 +80,33 @@ def vertical_sensor_height(sensor_width_mm: float) -> float:
     return sensor_width_mm * (ref_h / ref_w) / SAFE_FRACTION
 
 
+def vertical_shift_y() -> float:
+    """Lens shift that lands the reference framing in the safe area itself.
+
+    `vertical_sensor_height` alone only guarantees a band of the *right height*,
+    and it lands centred — because the camera's optical axis is the middle of
+    the frame. But the safe area is not centred: the bottom fifth is taken and
+    only the top eighth is, so its middle sits 3.75% of the frame height above
+    the middle of the picture. Without this shift the whole composition rides
+    that far low, which is exactly far enough to push a board's contact patch
+    under the caption band while the numbers still look approximately right.
+
+    Two things here were established by measuring a render rather than by
+    reading the manual, and both are easy to get backwards:
+
+      · **Magnitude.** Blender's shift is a fraction of the image's LARGER
+        dimension, which for a portrait render is its height. So the value is
+        directly a fraction of frame height. (On a landscape frame it would be
+        a fraction of the width, and this term would be wrong — which is one
+        more reason it is only ever applied to a vertical cut.)
+      · **Sign.** A negative shift raises the picture in frame. The first
+        vertical test used the positive value and moved the subject DOWN by
+        0.0375, from y 0.178..0.723 to 0.141..0.685 — doubling the error it was
+        added to remove.
+    """
+    return 0.5 - (SAFE_BOTTOM + (1.0 - SAFE_TOP)) / 2.0
+
+
 def safe_insets(width: int, height: int) -> tuple[float, float]:
     """Safe-area insets for a frame of this shape, as fractions of its height.
 
