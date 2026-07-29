@@ -100,17 +100,34 @@ format for milestones.** Concept never ships alone and never carries a milestone
 structural: a project whose thesis is honest engineering cannot let the pretty authored picture be
 the thing that represents an achievement.
 
-### Three former tenets, withdrawn for Concept (CEO, 2026-07-26)
+### Three former tenets, withdrawn (CEO, 2026-07-26)
 
-These were binding on all output until 2026-07-26. The CEO has **overruled all three for Concept**:
+These were binding on all output until 2026-07-26. The CEO **overruled all three outright** — not
+only for Concept:
 
 - ~~No identifiable place~~ — withdrawn. **Seattle is explicitly wanted.**
 - ~~No terrain the plant does not model~~ — withdrawn.
 - ~~No photoreal rider~~ — withdrawn.
 
-**Sim Replay keeps all three by construction**, not by agreement — Sim Replay is a replay of the plant, and
-the plant is a flat rigid plane with no rider dynamics and no geography. Nothing enforces these in
-Sim Replay; the category definition already excludes them.
+⚠️ **Correction, 2026-07-28.** An earlier version of this section claimed *"Sim Replay keeps all three
+by construction."* **That was wrong on both counts**, and it was wrong in the direction that matters —
+it told you a constraint was self-enforcing when it was not.
+
+**What a Sim Replay actually guarantees is the MOTION, not the picture.** The trajectory is a replay
+of the plant and cannot depict manoeuvres the plant did not perform. The **scene is authored** — set
+dressing, backdrop, HDRI, lighting — in *both* categories. A set is a set. So an identifiable real
+place can appear in a Sim Replay, and does: the shipped V1.3 waterfront masters and the 9:16 example
+all use an HDRI showing a recognisable location. That is **permitted**, because the rule was
+withdrawn; the defect was the documentation claiming otherwise.
+
+**The line that actually holds by construction, and the only one:**
+
+> A Sim Replay's motion is reproducible from the committed `.otrk` plus the committed scene.
+> Everything a viewer sees *around* that motion is a choice someone made.
+
+Consequence for how you work: **do not rely on the category to keep a promise about the picture.**
+If a shot must avoid something, avoid it deliberately in the scene — the category will not do it for
+you.
 
 Consequence worth stating plainly: the old "the abstraction is the disclosure" argument — a mint
 stick-figure rider makes it self-evidently not real footage, so no mark is needed — **does not
