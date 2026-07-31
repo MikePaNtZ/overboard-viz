@@ -725,6 +725,13 @@ def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
             "scenario": track_manifest["source"]["scenario"],
             "model_file": track_manifest["source"].get("model_file"),
             "model_sha256": track_manifest["source"].get("model_sha256"),
+            # Carried up from the track rather than left one hop away inside it.
+            # A reader checking "which run is this?" has the render manifest in
+            # front of them; making them fetch the .otrk and parse it first is
+            # the friction that turns a checkable claim into an assumed one.
+            # `dirty` comes with it, because a commit alone does not identify a
+            # tree that had uncommitted edits in it.
+            "controls": track_manifest["source"].get("controls"),
         },
         "render": {
             "scene": args.scene, "engine": args.engine, "samples": args.samples,
