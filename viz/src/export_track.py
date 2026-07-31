@@ -22,13 +22,33 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
-OVERBOARD = Path.home() / "projects/overboard"
+# The controls checkout this track is exported FROM, overridable because the
+# default is a directory this role does not own.
+#
+# `~/projects/overboard` is the shared main worktree. Another session is
+# routinely mid-edit in it, which makes it the wrong thing to hardcode: the
+# commit recorded below is then whatever that session happens to be sitting on,
+# and `dirty` is true because of their uncommitted work rather than anything
+# about this run. Caught exporting a shuttle track stamped `852b438 / dirty`
+# while controls master was eight commits further on -- a track that could not
+# be published, for reasons that had nothing to do with the track.
+#
+# Point this at a clean worktree at a known commit instead:
+#
+#     OVERBOARD_REPO=~/projects/overboard-dcp \
+#       ~/projects/overboard/.venv/bin/python viz/src/export_track.py --shuttle
+#
+# The venv still comes from the main checkout -- it supplies mujoco, not the
+# scenario code, and the scenario code is what has to be pinned.
+OVERBOARD = Path(os.environ.get("OVERBOARD_REPO",
+                                Path.home() / "projects/overboard")).expanduser()
 MESH_DIR = OVERBOARD / "sim/models/meshes/openwheel"
 sys.path.insert(0, str(OVERBOARD))
 
@@ -46,13 +66,28 @@ def controls_provenance() -> dict:
     """Which tree of `overboard` this track was exported from.
 
     Without this, a track's provenance stops at "some run of this scenario",
-    and the whole Sim Replay claim rests on a date. That is not hypothetical:
-    the shuttle clip on the landing page replayed a track exported four hours
-    before the IMU frame-map fix (`dd8d189`), which changed the *trajectory* —
-    the same route returned to 6.8 cm before it and 23.5 cm after. Nothing in
-    the shipped `.otrk` said which side of that fix its pixels came from, so
-    "post-dates the fix" could only ever be asserted, never checked. See
-    MikePaNtZ/overboard-viz#6.
+    and the whole Sim Replay claim rests on a date rather than on a commit.
+
+    ⚠️ An earlier version of this docstring said the IMU frame-map fix
+    (`dd8d189`) "changed the trajectory — the same route returned to 6.8 cm
+    before it and 23.5 cm after". **That attribution is wrong**, and it was
+    wrong in the direction that matters: it named the wrong cause for the
+    headline number on a published clip. Measured by bisect, every run on a
+    clean checkout with `--seconds 0`:
+
+        17ad8ca  (dd8d189^, BEFORE the frame-map fix)     0.06475 m
+        908f341  (49a2cfc^, AFTER  the frame-map fix)     0.06475 m   <- unchanged
+        49a2cfc  run the attitude estimator by default    0.23311 m   <- the change
+        b3fa9f7  current master                           0.23157 m
+
+    The frame-map fix did not move this number at all. The 6.5 -> 23.3 cm jump
+    is `49a2cfc`, where the scenario stopped running on ground truth and started
+    running on the attitude estimate — a more interesting reason, and a
+    different claim. See MikePaNtZ/overboard-viz#6.
+
+    Which is the argument for recording the commit rather than reasoning about
+    dates: the wrong cause was believed for days precisely because the shipped
+    `.otrk` named nothing that could be checked.
 
     `dirty` is recorded rather than suppressed. A commit alone does not
     identify a tree with uncommitted edits in it, and quietly stamping one as
