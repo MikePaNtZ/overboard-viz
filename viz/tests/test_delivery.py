@@ -20,6 +20,7 @@ from delivery import (  # noqa: E402
     ASPECTS, CATEGORY_SLUGS, MARKS, REFERENCE_ASPECT, SAFE_BOTTOM, SAFE_FRACTION,
     SAFE_TOP, safe_insets, vertical_sensor_height, vertical_shift_y)
 from stamp_frames import mark_box, mark_is_safe, style_for  # noqa: E402
+import og_card  # noqa: E402
 
 LANDSCAPE = ASPECTS[REFERENCE_ASPECT]
 VERTICAL = ASPECTS["9:16"]
@@ -135,6 +136,50 @@ def test_landscape_mark_position_is_unchanged_by_this_work():
     assert abs(y0 * h - (expected_y - size * 0.5)) < 1e-9
     assert abs(y1 * h - (expected_y + size * 1.55)) < 1e-9
     assert abs(x0 * w - (pad - size * 0.7)) < 1e-9
+
+
+def test_the_share_card_survives_a_centre_square_crop():
+    """The board stays in frame on surfaces that crop the card square.
+
+    A share card is the most-seen asset the project publishes and the one whose
+    framing nobody re-checks, because the failure is invisible in the file
+    itself: the 1200x630 looks correct and only the square rendering is empty
+    ground. The obvious composition walks straight into it — the HUD column sits
+    to the board's left, so framing "around the HUD" pushes the subject to the
+    edge, exactly where a square crop discards it.
+    """
+    assert og_card.square_crop_keeps_subject()
+
+    band = og_card.CARD_H / og_card.CARD_W
+    x0, _, x1, _ = og_card.subject_in_card()
+    assert x0 >= 0.5 - band / 2
+    assert x1 <= 0.5 + band / 2
+
+
+def test_the_share_card_crop_is_the_card_aspect_so_nothing_stretches():
+    """Crop and card must agree on aspect, or the board is subtly wrong-shaped.
+
+    An anisotropic resize is the kind of defect that survives review: a board
+    2% too tall reads as a rendering choice, not a bug, and it ships.
+    """
+    left, upper, right, lower = og_card.CROP
+    assert (right - left) / (lower - upper) == og_card.CARD_W / og_card.CARD_H
+
+
+def test_the_share_card_is_a_replay_and_says_which_source():
+    """The card inherits Sim Replay, and a Replay always names its source.
+
+    The crop removes the source tag burnt into the frame's corner, so the card
+    would otherwise ship as an unmarked Replay — the one state the category rule
+    does not allow.
+    """
+    assert og_card.CATEGORY in MARKS
+    assert MARKS[og_card.CATEGORY] == "SIM"
+
+    style = style_for(og_card.CATEGORY)
+    size = (og_card.CARD_W, og_card.CARD_H)
+    assert mark_is_safe(size, MARKS[og_card.CATEGORY], style["letterspace"],
+                        style["corner"])
 
 
 def _main() -> int:
