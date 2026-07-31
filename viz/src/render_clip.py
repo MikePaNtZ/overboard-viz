@@ -38,6 +38,7 @@ import argparse
 import hashlib
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -699,6 +700,25 @@ def _category(track_manifest, track_name: str) -> str:
         f"resolves to a category. Refusing to render an unlabelled artefact.")
 
 
+def _repo_provenance(repo: Path) -> dict:
+    """Which tree of this repo produced the render. Mirrors the track's shape."""
+    def git(*a: str) -> str:
+        return subprocess.run(["git", "-C", str(repo), *a],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    try:
+        sha = git("rev-parse", "HEAD")
+        return {
+            "repo": "MikePaNtZ/overboard-viz",
+            "commit": sha,
+            "commit_short": sha[:7],
+            "commit_url": f"https://github.com/MikePaNtZ/overboard-viz/commit/{sha}",
+            "dirty": bool(git("status", "--porcelain")),
+        }
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return {"repo": "MikePaNtZ/overboard-viz", "commit": None,
+                "unavailable": f"{type(exc).__name__}: {exc}"}
+
+
 def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
     """Emit the per-render manifest: category, mark, and the track's hash.
 
@@ -725,8 +745,28 @@ def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
             "scenario": track_manifest["source"]["scenario"],
             "model_file": track_manifest["source"].get("model_file"),
             "model_sha256": track_manifest["source"].get("model_sha256"),
+            # Carried up from the track rather than left one hop away inside it.
+            # A reader checking "which run is this?" has the render manifest in
+            # front of them; making them fetch the .otrk and parse it first is
+            # the friction that turns a checkable claim into an assumed one.
+            # `dirty` comes with it, because a commit alone does not identify a
+            # tree that had uncommitted edits in it.
+            "controls": track_manifest["source"].get("controls"),
         },
         "render": {
+            # The renderer pins the run it filmed (track.controls) but used to
+            # leave ITSELF unpinned, which makes a clip unreproducible for a
+            # reason no argument list can fix: the SCENE is code, and it moves.
+            #
+            # Found the hard way on #6. The shipped shuttle clip was filmed
+            # against `30925d3` ("dusk waterfront promenade — paved path"); a
+            # commit 38 minutes later, `8cef093` ("bike trail"), replaced that
+            # ground with asphalt and grass. Re-rendering the same track with
+            # the same camera arguments today produces a visibly different
+            # place, and nothing recorded anywhere said which scene the
+            # original had. Shot presets pin the ARGUMENTS; only this pins the
+            # scene they are arguments to.
+            "viz": _repo_provenance(ROOT),
             "scene": args.scene, "engine": args.engine, "samples": args.samples,
             "resolution": [args.width, args.height], "lens": args.lens,
             "exposure_ev": args.exposure, "hdri_rot_deg": args.hdri_rot,
@@ -755,9 +795,83 @@ def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Shot presets
+# ---------------------------------------------------------------------------
+#
+# Every shipped clip used a different combination of the dozen camera and grade
+# arguments below, arrived at by iteration, and those combinations lived only in
+# commit messages and a Notion handoff. Re-rendering a shipped asset meant
+# guessing -- which is not a documentation nuisance, it is the reason a
+# "corrected take" of an existing clip could not be produced without silently
+# becoming a different shot.
+#
+# Transcribed from handoff §3.1. Two transcription traps, both live:
+#
+#   · "height 1.30" in the handoff is the CAMERA height above board centre,
+#     i.e. --height-offset. It is NOT --height, which is the render's pixel
+#     height. The garage value (0.06) is the same field and reads as "6 cm
+#     above board centre" in the handoff, which is what disambiguates it.
+#   · hdri_rot is NOT a free parameter. The outdoor HDRI has Cape Town in some
+#     directions and open water in others, and the rotation is tuned per camera
+#     HEADING to keep the shot anonymous -- 250 side-on, 160 for the chase.
+#     Change the camera and the anonymity check is silently invalid; nothing
+#     errors. See handoff §5.2, where the best-looking frame of the session
+#     showed Lion's Head outright.
+#
+# So a preset is a single unit: take all of it or none of it. Overriding one
+# field on the command line is how a shot drifts.
+SHOTS = {
+    "garage-side": dict(
+        scene="garage", static=False, lens=50.0, side=-1.62,
+        height_offset=0.06, hdri_rot=115.0, hdri_strength=0.70,
+        exposure=-0.5, kicker=30.0, floor_tint=0.16,
+    ),
+    # The shuttle run and every side-on waterfront still.
+    "waterfront-static": dict(
+        scene="waterfront", static=True, lens=35.0, side=-5.2,
+        height_offset=1.30, aim_up=0.5, hdri_rot=250.0, hdri_strength=0.75,
+        exposure=-1.15, kicker=9000.0, floor_tint=0.85,
+    ),
+    # The cruise. Chase camera looks along travel, hence the different rotation.
+    "waterfront-chase": dict(
+        scene="waterfront", static=False, lens=40.0, side=-2.6,
+        height_offset=1.05, aim_up=0.75, lag=1.0, cam_back=3.6,
+        hdri_rot=160.0, hdri_strength=0.75, exposure=-1.15,
+        kicker=9000.0, floor_tint=0.85,
+    ),
+}
+
+
+def apply_shot(args, ap) -> None:
+    """Fill a preset in, and refuse to let it be half-applied.
+
+    A preset that can be silently overridden one field at a time is not a
+    preset, it is a default -- and the whole reason this exists is that
+    per-field drift is invisible in the output. So anything the caller set
+    explicitly alongside --shot is an error rather than a quiet override.
+    """
+    if not args.shot:
+        return
+    preset = SHOTS[args.shot]
+    explicit = {a.lstrip("-").replace("-", "_")
+                for a in sys.argv if a.startswith("--")}
+    clashes = sorted(explicit & set(preset))
+    if clashes:
+        ap.error(
+            f"--shot {args.shot} already sets {', '.join(clashes)}. Overriding "
+            f"one field of a preset is how a shot drifts from the thing it is "
+            f"supposed to reproduce. Add a new preset instead.")
+    for k, v in preset.items():
+        setattr(args, k, v)
+
+
 def main() -> int:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
+    ap.add_argument("--shot", choices=sorted(SHOTS), default=None,
+                    help="a recorded shot preset; reproduces a shipped clip's "
+                         "framing and grade exactly. See SHOTS.")
     ap.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
     ap.add_argument("--samples", type=int, default=64)
     ap.add_argument("--aspect", default=REFERENCE_ASPECT, choices=list(ASPECTS),
@@ -800,6 +914,7 @@ def main() -> int:
     ap.add_argument("--frame", type=int, default=0,
                     help="render this single frame only, for iteration")
     args = ap.parse_args(argv)
+    apply_shot(args, ap)
     _w, _h = ASPECTS[args.aspect]
     args.width, args.height = args.width or _w, args.height or _h
 
