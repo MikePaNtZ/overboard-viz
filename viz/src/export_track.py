@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -37,6 +38,51 @@ from sim.scenarios.rust_controller import RustController  # noqa: E402
 from sim.scenarios import shuttle_run as shuttle  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
+
+REPO = "MikePaNtZ/overboard"
+
+
+def controls_provenance() -> dict:
+    """Which tree of `overboard` this track was exported from.
+
+    Without this, a track's provenance stops at "some run of this scenario",
+    and the whole Sim Replay claim rests on a date. That is not hypothetical:
+    the shuttle clip on the landing page replayed a track exported four hours
+    before the IMU frame-map fix (`dd8d189`), which changed the *trajectory* —
+    the same route returned to 6.8 cm before it and 23.5 cm after. Nothing in
+    the shipped `.otrk` said which side of that fix its pixels came from, so
+    "post-dates the fix" could only ever be asserted, never checked. See
+    MikePaNtZ/overboard-viz#6.
+
+    `dirty` is recorded rather than suppressed. A commit alone does not
+    identify a tree with uncommitted edits in it, and quietly stamping one as
+    if it did is the failure this function exists to prevent — a track that
+    names a commit it was not actually produced from is worse than a track
+    that names nothing.
+    """
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(OVERBOARD), *args],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    try:
+        sha = git("rev-parse", "HEAD")
+        dirty = bool(git("status", "--porcelain"))
+    except (OSError, subprocess.CalledProcessError) as exc:
+        # Exporting from a tarball or a non-git checkout is legitimate. Say so
+        # in the file instead of omitting the key, so a reader can tell
+        # "unknown" apart from "this exporter is too old to record it".
+        return {"repo": REPO, "commit": None,
+                "unavailable": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "repo": REPO,
+        "commit": sha,
+        "commit_short": sha[:7],
+        "commit_url": f"https://github.com/{REPO}/commit/{sha}",
+        "dirty": dirty,
+    }
 
 # Bodies are discovered from the model rather than hardcoded: the shuttle-run
 # plant adds a `ballast` body carrying the rider proxy, and a fixed list would
@@ -226,7 +272,8 @@ def _export_shuttle(args) -> int:
             "ballast_height_m": params.ballast_height_m,
             "model_file": "built by sim.scenarios.plant.build_model()",
             "mujoco_version": mujoco.__version__,
-            "exporter_version": "otrk-export 1.0.0",
+            "exporter_version": "otrk-export 1.2.0",
+            "controls": controls_provenance(),
         },
         "time": {"fps": args.fps, "n_frames": n, "duration_s": float(t[-1])},
         "bodies": BODIES,
@@ -436,7 +483,8 @@ def _export_bench(args) -> int:
             "commanded_current_a": ip.commanded_current_a,
             "imperfection_profile": STAGE0_PLACEHOLDER.profile_id,
             "mujoco_version": mujoco.__version__,
-            "exporter_version": "otrk-export 1.1.0",
+            "exporter_version": "otrk-export 1.2.0",
+            "controls": controls_provenance(),
         },
         # One frame is one timestep. `fps` is the PLAYBACK rate; `time_scale`
         # is how much slower than life that is, and the renderer must display
@@ -601,7 +649,8 @@ def main() -> int:
             "model_sha256": hashlib.sha256(
                 (OVERBOARD / "sim/models/overboard_onewheel.xml").read_bytes()).hexdigest(),
             "mujoco_version": mujoco.__version__,
-            "exporter_version": "otrk-export 1.0.0",
+            "exporter_version": "otrk-export 1.2.0",
+            "controls": controls_provenance(),
         },
         "time": {"fps": args.fps, "n_frames": n, "duration_s": float(t[-1])},
         "bodies": BODIES,
