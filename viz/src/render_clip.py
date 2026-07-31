@@ -38,6 +38,7 @@ import argparse
 import hashlib
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 
@@ -699,6 +700,25 @@ def _category(track_manifest, track_name: str) -> str:
         f"resolves to a category. Refusing to render an unlabelled artefact.")
 
 
+def _repo_provenance(repo: Path) -> dict:
+    """Which tree of this repo produced the render. Mirrors the track's shape."""
+    def git(*a: str) -> str:
+        return subprocess.run(["git", "-C", str(repo), *a],
+                              capture_output=True, text=True, check=True).stdout.strip()
+    try:
+        sha = git("rev-parse", "HEAD")
+        return {
+            "repo": "MikePaNtZ/overboard-viz",
+            "commit": sha,
+            "commit_short": sha[:7],
+            "commit_url": f"https://github.com/MikePaNtZ/overboard-viz/commit/{sha}",
+            "dirty": bool(git("status", "--porcelain")),
+        }
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return {"repo": "MikePaNtZ/overboard-viz", "commit": None,
+                "unavailable": f"{type(exc).__name__}: {exc}"}
+
+
 def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
     """Emit the per-render manifest: category, mark, and the track's hash.
 
@@ -734,6 +754,19 @@ def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
             "controls": track_manifest["source"].get("controls"),
         },
         "render": {
+            # The renderer pins the run it filmed (track.controls) but used to
+            # leave ITSELF unpinned, which makes a clip unreproducible for a
+            # reason no argument list can fix: the SCENE is code, and it moves.
+            #
+            # Found the hard way on #6. The shipped shuttle clip was filmed
+            # against `30925d3` ("dusk waterfront promenade — paved path"); a
+            # commit 38 minutes later, `8cef093` ("bike trail"), replaced that
+            # ground with asphalt and grass. Re-rendering the same track with
+            # the same camera arguments today produces a visibly different
+            # place, and nothing recorded anywhere said which scene the
+            # original had. Shot presets pin the ARGUMENTS; only this pins the
+            # scene they are arguments to.
+            "viz": _repo_provenance(ROOT),
             "scene": args.scene, "engine": args.engine, "samples": args.samples,
             "resolution": [args.width, args.height], "lens": args.lens,
             "exposure_ev": args.exposure, "hdri_rot_deg": args.hdri_rot,
