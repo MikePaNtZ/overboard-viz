@@ -755,9 +755,83 @@ def _write_render_manifest(args, track_manifest, n, fps, framing) -> Path:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Shot presets
+# ---------------------------------------------------------------------------
+#
+# Every shipped clip used a different combination of the dozen camera and grade
+# arguments below, arrived at by iteration, and those combinations lived only in
+# commit messages and a Notion handoff. Re-rendering a shipped asset meant
+# guessing -- which is not a documentation nuisance, it is the reason a
+# "corrected take" of an existing clip could not be produced without silently
+# becoming a different shot.
+#
+# Transcribed from handoff §3.1. Two transcription traps, both live:
+#
+#   · "height 1.30" in the handoff is the CAMERA height above board centre,
+#     i.e. --height-offset. It is NOT --height, which is the render's pixel
+#     height. The garage value (0.06) is the same field and reads as "6 cm
+#     above board centre" in the handoff, which is what disambiguates it.
+#   · hdri_rot is NOT a free parameter. The outdoor HDRI has Cape Town in some
+#     directions and open water in others, and the rotation is tuned per camera
+#     HEADING to keep the shot anonymous -- 250 side-on, 160 for the chase.
+#     Change the camera and the anonymity check is silently invalid; nothing
+#     errors. See handoff §5.2, where the best-looking frame of the session
+#     showed Lion's Head outright.
+#
+# So a preset is a single unit: take all of it or none of it. Overriding one
+# field on the command line is how a shot drifts.
+SHOTS = {
+    "garage-side": dict(
+        scene="garage", static=False, lens=50.0, side=-1.62,
+        height_offset=0.06, hdri_rot=115.0, hdri_strength=0.70,
+        exposure=-0.5, kicker=30.0, floor_tint=0.16,
+    ),
+    # The shuttle run and every side-on waterfront still.
+    "waterfront-static": dict(
+        scene="waterfront", static=True, lens=35.0, side=-5.2,
+        height_offset=1.30, aim_up=0.5, hdri_rot=250.0, hdri_strength=0.75,
+        exposure=-1.15, kicker=9000.0, floor_tint=0.85,
+    ),
+    # The cruise. Chase camera looks along travel, hence the different rotation.
+    "waterfront-chase": dict(
+        scene="waterfront", static=False, lens=40.0, side=-2.6,
+        height_offset=1.05, aim_up=0.75, lag=1.0, cam_back=3.6,
+        hdri_rot=160.0, hdri_strength=0.75, exposure=-1.15,
+        kicker=9000.0, floor_tint=0.85,
+    ),
+}
+
+
+def apply_shot(args, ap) -> None:
+    """Fill a preset in, and refuse to let it be half-applied.
+
+    A preset that can be silently overridden one field at a time is not a
+    preset, it is a default -- and the whole reason this exists is that
+    per-field drift is invisible in the output. So anything the caller set
+    explicitly alongside --shot is an error rather than a quiet override.
+    """
+    if not args.shot:
+        return
+    preset = SHOTS[args.shot]
+    explicit = {a.lstrip("-").replace("-", "_")
+                for a in sys.argv if a.startswith("--")}
+    clashes = sorted(explicit & set(preset))
+    if clashes:
+        ap.error(
+            f"--shot {args.shot} already sets {', '.join(clashes)}. Overriding "
+            f"one field of a preset is how a shot drifts from the thing it is "
+            f"supposed to reproduce. Add a new preset instead.")
+    for k, v in preset.items():
+        setattr(args, k, v)
+
+
 def main() -> int:
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     ap = argparse.ArgumentParser()
+    ap.add_argument("--shot", choices=sorted(SHOTS), default=None,
+                    help="a recorded shot preset; reproduces a shipped clip's "
+                         "framing and grade exactly. See SHOTS.")
     ap.add_argument("--engine", default="EEVEE", choices=["EEVEE", "CYCLES"])
     ap.add_argument("--samples", type=int, default=64)
     ap.add_argument("--aspect", default=REFERENCE_ASPECT, choices=list(ASPECTS),
@@ -800,6 +874,7 @@ def main() -> int:
     ap.add_argument("--frame", type=int, default=0,
                     help="render this single frame only, for iteration")
     args = ap.parse_args(argv)
+    apply_shot(args, ap)
     _w, _h = ASPECTS[args.aspect]
     args.width, args.height = args.width or _w, args.height or _h
 
