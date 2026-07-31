@@ -65,9 +65,19 @@ CLIPS = {
         # whole argument of the clip is legible in this one frame, which is
         # exactly what a poster has to do.
         "poster_at_s": 13.6,
-        "summary": "the same 10% descent twice. Truth pitch survives; the real "
-                   "estimator nose-strikes at 3.28 s. Same terrain, same "
-                   "controller -- only the attitude source differs.",
+        # Worded carefully. The manifest's `struck_phase` says "descent", but
+        # that is the scenario classifier bucketing negative travel; the run
+        # never reaches the descent. Both drift backwards off the start crest
+        # during the 2 s settle, truth recovers and rides on, the estimate puts
+        # the nose in while still behind the start. Captioning it as a descent
+        # failure describes something the footage does not show.
+        "summary": "the same 10% roller, same controller, run twice with only "
+                   "the attitude source differing. Truth pitch reaches the next "
+                   "crest at 24 m; the real estimator nose-strikes at 3.28 s, "
+                   "0.87 m behind the start crest, before the descent begins.",
+        "caption_warning": "Do not caption as a failure 'on the descent'. The "
+                           "manifest's struck_phase says descent; that is a "
+                           "classifier artefact for negative travel.",
     },
 }
 
@@ -154,6 +164,11 @@ def build(release_dir: Path, out_dir: Path) -> list[dict]:
             "vocabulary": manifest.get("vocabulary"),
             "scenario": manifest.get("scenario"),
             "summary": spec["summary"],
+            # Only present where a clip's metrics can be read to say something
+            # the footage does not show. It travels with the file because the
+            # role that writes the caption is not the role that watched the run.
+            **({"caption_warning": spec["caption_warning"]}
+               if spec.get("caption_warning") else {}),
             "source": manifest.get("source"),
             "derived_from": {
                 "release": "sim-latest",
